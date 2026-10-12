@@ -50,3 +50,23 @@ def missing_tools() -> list[str]:
     if prepare_libmpv() is None:
         missing.append("libmpv-2.dll")
     return missing
+
+
+def settings_file() -> str | None:
+    """포터블 설정 파일 경로 (exe 옆 settings.ini). 그 폴더에 쓸 수 없으면 None → 레지스트리 사용."""
+    path = os.path.join(base_dir(), "settings.ini")
+    try:
+        with open(path, "a", encoding="utf-8"):
+            pass
+        return path
+    except OSError:
+        return None
+
+
+def make_settings():
+    """QSettings 생성: 쓸 수 있으면 exe 옆 settings.ini (포터블), 아니면 레지스트리."""
+    from PySide6.QtCore import QSettings
+    path = settings_file()
+    if path:
+        return QSettings(path, QSettings.IniFormat)
+    return QSettings("ClipSlicer", "ClipSlicer")

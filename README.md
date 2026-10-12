@@ -78,6 +78,7 @@ git push origin v0.2.0
 ```
 
 `dist\ClipSlicer\ClipSlicer.exe` 가 만들어집니다. ffmpeg, ffprobe, libmpv 가 같이 들어갑니다.
+설치 없이 폴더째 복사해서 쓰는 **포터블** 구조이며, 설정은 폴더 안 `settings.ini` 에 저장됩니다.
 
 ## 구조
 

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__, ffmpeg_tools
+from .paths import make_settings
 from .dialogs import SilenceDialog, PatternDialog, ask_overwrite
 from .help import HelpDialog
 from .player import MpvWidget
@@ -111,7 +112,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"ClipSlicer {__version__}")
         self.resize(1320, 800)
         self.setAcceptDrops(True)
-        self.settings = QSettings("ClipSlicer", "ClipSlicer")
+        self.settings = make_settings()  # exe 옆 settings.ini (포터블)
 
         self.projects: dict[str, ClipProject] = {}
         self.current: ClipProject | None = None
