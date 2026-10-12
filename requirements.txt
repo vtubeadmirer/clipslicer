@@ -1,5 +1,4 @@
 PySide6>=6.6
 mpv>=1.0.6
-numpy>=1.24
 py7zr>=0.20      # tools/get_libmpv.py 용
 pyinstaller>=6.0 # build.ps1 용

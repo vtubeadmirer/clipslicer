@@ -138,6 +138,9 @@ class MpvWidget(QWidget):
     def set_volume(self, vol: int):
         self.mpv.volume = vol
 
+    def set_mute(self, mute: bool):
+        self.mpv.mute = mute
+
     # ---- 이벤트 ----
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

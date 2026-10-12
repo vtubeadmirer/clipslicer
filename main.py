@@ -3,10 +3,11 @@ import os
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtGui import QPalette, QColor, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from app.paths import missing_tools, base_dir
+from app.style import QSS
 
 
 def apply_dark_theme(app: QApplication):
@@ -27,12 +28,22 @@ def apply_dark_theme(app: QApplication):
     p.setColor(QPalette.Disabled, QPalette.Text, QColor(120, 120, 128))
     p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(120, 120, 128))
     app.setPalette(p)
+    app.setStyleSheet(QSS)
+
+
+def app_icon() -> QIcon:
+    for name in ("icon.ico", "icon.png"):
+        for d in (os.path.join(base_dir(), "assets"), base_dir(), getattr(sys, "_MEIPASS", "")):
+            if d and os.path.isfile(os.path.join(d, name)):
+                return QIcon(os.path.join(d, name))
+    return QIcon()
 
 
 def main():
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setApplicationName("ClipSlicer")
+    app.setWindowIcon(app_icon())
     apply_dark_theme(app)
 
     missing = missing_tools()

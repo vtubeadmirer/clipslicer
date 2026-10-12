@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClipSlicer 사용 설명서</title>
+<style>
+  :root { --bg:#1b1b1f; --panel:#24242a; --text:#e4e4e8; --muted:#9aa0a6; --accent:#42a5f5; --warn:#ffa726; --red:#ef5350; --green:#66bb6a; --border:#36363e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:'Malgun Gothic','Segoe UI',system-ui,sans-serif; line-height:1.65; font-size:15px; }
+  header { background:linear-gradient(135deg,#1e2a3a,#1b1b1f); border-bottom:1px solid var(--border); padding:40px 24px 28px; }
+  header .in { max-width:1000px; margin:0 auto; display:flex; gap:20px; align-items:center; }
+  header h1 { margin:0; font-size:30px; }
+  header p { margin:6px 0 0; color:var(--muted); }
+  .logo { width:64px; height:64px; border-radius:14px; background:#1e1e24; position:relative; flex:none; }
+  .logo .film { position:absolute; left:8%; right:8%; top:30%; bottom:30%; background:var(--accent); }
+  .logo .line { position:absolute; left:58%; top:14%; bottom:14%; width:3px; background:var(--red); }
+  .wrap { max-width:1000px; margin:0 auto; padding:24px; display:grid; grid-template-columns:220px 1fr; gap:32px; }
+  nav { position:sticky; top:16px; align-self:start; font-size:14px; }
+  nav a { display:block; color:var(--muted); text-decoration:none; padding:5px 10px; border-left:2px solid transparent; }
+  nav a:hover { color:var(--text); border-left-color:var(--accent); }
+  nav .grp { margin:12px 0 4px; font-size:12px; color:#666; text-transform:uppercase; letter-spacing:.06em; padding-left:10px; }
+  main h2 { font-size:22px; color:#7cc4ff; margin:40px 0 10px; padding-top:8px; border-top:1px solid var(--border); }
+  main h2:first-child { margin-top:0; border-top:none; }
+  main h3 { font-size:16px; color:#ffd54f; margin:22px 0 6px; }
+  p { margin:6px 0 10px; }
+  kbd { background:#3a3a44; border:1px solid #666; border-bottom-width:2px; border-radius:4px; padding:1px 7px; font-family:Consolas,monospace; font-size:13px; color:#fff; }
+  code { font-family:Consolas,monospace; color:#9fe3c9; background:#15151a; padding:1px 5px; border-radius:3px; font-size:13.5px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0 14px; font-size:14px; }
+  th, td { border:1px solid var(--border); padding:7px 10px; text-align:left; vertical-align:top; }
+  th { background:#2a2a32; color:#cfd8dc; }
+  tr:nth-child(even) td { background:#202026; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin:12px 0; }
+  .tip { border-left:4px solid var(--accent); }
+  .warn { border-left:4px solid var(--warn); }
+  .steps { counter-reset:s; list-style:none; padding:0; }
+  .steps li { counter-increment:s; position:relative; padding:10px 0 10px 48px; border-bottom:1px dashed var(--border); }
+  .steps li::before { content:counter(s); position:absolute; left:0; top:10px; width:32px; height:32px; border-radius:50%; background:var(--accent); color:#000; font-weight:bold; display:flex; align-items:center; justify-content:center; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .mode { border-radius:8px; padding:12px 14px; border:1px solid var(--border); background:var(--panel); }
+  .mode h4 { margin:0 0 6px; font-size:15px; }
+  .fast h4 { color:var(--green); } .smart h4 { color:var(--accent); } .precise h4 { color:var(--warn); }
+  .tl { background:#111; border:1px solid var(--border); border-radius:6px; padding:12px; margin:10px 0; font-family:Consolas,monospace; font-size:13px; color:#ccc; white-space:pre; overflow:auto; }
+  .k { color:#fff; } .m { color:var(--red); } .p { color:#fff; font-weight:bold; } .s1 { color:#42a5f5; } .s2 { color:#66bb6a; } .s3 { color:#ffa726; }
+  footer { max-width:1000px; margin:40px auto; padding:0 24px 40px; color:var(--muted); font-size:13px; }
+  a { color:#7cc4ff; }
+  @media (max-width:800px) { .wrap { grid-template-columns:1fr; } nav { position:static; } .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <div class="logo"><div class="film"></div><div class="line"></div></div>
+  <div><h1>ClipSlicer 사용 설명서</h1>
+  <p>마커만 찍으면 구간별로 잘라 주는 가벼운 Windows 영상 자르기 도구 · 버전 0.2</p></div>
+</div></header>
+
+<div class="wrap">
+<nav>
+  <div class="grp">기본</div>
+  <a href="#intro">소개</a><a href="#start">5분 안에 시작하기</a><a href="#screen">화면 구성</a>
+  <div class="grp">조작</div>
+  <a href="#keys">단축키</a><a href="#timeline">타임라인</a><a href="#markers">마커와 구간</a>
+  <div class="grp">내보내기</div>
+  <a href="#modes">자르기 모드</a><a href="#keyframe">키프레임 이야기</a><a href="#export">내보내기 옵션</a>
+  <div class="grp">편의 기능</div>
+  <a href="#silence">무음 자동 마커</a><a href="#merge">합치기 · 오디오</a><a href="#save">자동 저장 · 설정</a>
+  <div class="grp">기타</div>
+  <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
+</nav>
+
+<main>
+<h2 id="intro">소개</h2>
+<p>ClipSlicer 는 긴 영상에서 <b>필요한 부분만 잘라 각각 저장</b>하는 데 집중한 프로그램입니다.
+편집 프로그램처럼 In 점·Out 점을 잡는 대신, 영상을 보다가 <b>"여기서 자르자"</b> 하는 지점에 가위 표시(마커)만 찍습니다.
+마커 사이사이가 자동으로 구간이 되고, 필요 없는 구간은 끄고, 나머지를 한 번에 내보냅니다.</p>
+<div class="card tip"><b>이런 일에 맞습니다</b> — 방송·강의 녹화를 주제별로 나누기, 긴 촬영본에서 쓸 부분만 추리기, 광고·잡담 빼고 한 편으로 합치기,
+영상에서 소리만 뽑기. 자막·효과·여러 트랙 편집은 다른 프로그램의 영역입니다.</div>
+
+<h2 id="start">5분 안에 시작하기</h2>
+<ol class="steps">
+ <li><b>영상 열기.</b> 창 아무 곳에나 파일을 끌어다 놓거나 <kbd>Ctrl+O</kbd>. 여러 파일, 폴더째도 됩니다. 왼쪽 목록에 쌓이며 각 영상은 자기만의 마커를 가집니다.
+     열자마자 뒤에서 썸네일·파형·키프레임을 분석하므로 몇 초 뒤 타임라인이 채워집니다.</li>
+ <li><b>재생하며 자를 곳 찾기.</b> <kbd>Space</kbd> 재생/정지. 타임라인에 마우스를 올리면 그 위치의 썸네일이 떠서 훑어보기 쉽습니다.
+     멈춘 뒤 <kbd>←</kbd> <kbd>→</kbd> 로 한 프레임씩, <kbd>Shift</kbd>/<kbd>Ctrl</kbd> 조합으로 1초/10초씩 이동합니다.
+     <kbd>R</kbd> 을 누르면 현재 위치 앞뒤 2초를 반복 재생해서 자를 지점이 맞는지 확인할 수 있습니다.</li>
+ <li><b>마커 찍기.</b> <kbd>S</kbd> 또는 빨간 <b>✂ 여기서 자르기</b> 버튼. 빨간 세로선이 생기고 타임라인이 색 구간으로 나뉩니다. 잘못 찍었으면 <kbd>Ctrl+Z</kbd>.</li>
+ <li><b>구간 정리.</b> 필요 없는 구간은 타임라인에서 <kbd>Ctrl</kbd>+클릭 (또는 <kbd>E</kbd>, 또는 오른쪽 목록 체크 해제). 꺼진 구간은 어둡게 표시됩니다.
+     오른쪽 목록의 파일명 칸을 더블클릭하면 이름을 직접 정할 수 있습니다.</li>
+ <li><b>내보내기.</b> <kbd>Ctrl+E</kbd>. 켜진 구간이 각각 파일로 저장됩니다. 기본 위치는 원본 옆 <code>원본이름_cuts</code> 폴더이고, 끝나면 폴더가 열립니다.
+     모드는 <b>스마트</b>가 기본값이며 대부분의 경우 그대로 두면 됩니다.</li>
+</ol>
+
+<h2 id="screen">화면 구성</h2>
+<table>
+ <tr><th style="width:140px">영역</th><th>내용</th></tr>
+ <tr><td>왼쪽 — 영상 목록</td><td>열린 영상들. 이름 옆 <code>[3]</code> 은 켜진 구간 수. 클릭해서 전환, <kbd>Ctrl+↑</kbd> <kbd>Ctrl+↓</kbd> 로도 이동. 전환해도 각 영상의 마커·재생 위치는 유지됩니다.</td></tr>
+ <tr><td>가운데 위 — 플레이어</td><td>libmpv 기반이라 mp4·mkv·mov·webm·ts 등 거의 모든 포맷을 재생합니다. 클릭하면 재생/정지.</td></tr>
+ <tr><td>가운데 아래 — 타임라인</td><td>썸네일 띠, 파형, 구간 블록, 마커, 키프레임, 시간 눈금. 아래 항목에서 자세히.</td></tr>
+ <tr><td>컨트롤 줄</td><td>시간 표시(클릭하면 입력 가능), 이동 버튼, ✂ 자르기, 앞뒤 2초, 구간 반복, 재생 속도, 음소거·볼륨.</td></tr>
+ <tr><td>오른쪽 위 — 구간 목록</td><td>구간 번호(타임라인과 같은 색), 시작·끝·길이, 출력 파일명. 현재 재생 중인 구간은 파랗게 강조됩니다.</td></tr>
+ <tr><td>오른쪽 아래 — 내보내기</td><td>출력 폴더, 모드, 출력 종류(영상/오디오), 합치기, 진행률과 로그.</td></tr>
+ <tr><td>상태 표시줄</td><td>마지막 동작 메시지, 타임라인 확대 배율, 감지된 GPU 인코더, 자동 저장 표시.</td></tr>
+</table>
+
+<h2 id="keys">단축키</h2>
+<div class="grid2">
+<div>
+<h3>재생 · 이동</h3>
+<table>
+ <tr><td><kbd>Space</kbd> <kbd>K</kbd></td><td>재생 · 정지</td></tr>
+ <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>한 프레임</td></tr>
+ <tr><td><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd></td><td>1초</td></tr>
+ <tr><td><kbd>Ctrl</kbd>+<kbd>←</kbd><kbd>→</kbd></td><td>10초</td></tr>
+ <tr><td><kbd>J</kbd></td><td>5초 뒤로</td></tr>
+ <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>처음 · 끝</td></tr>
+ <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>이전 · 다음 구간 시작</td></tr>
+ <tr><td><kbd>[</kbd> <kbd>]</kbd> <kbd>\</kbd></td><td>속도 느리게 · 빠르게 · 1배속</td></tr>
+ <tr><td><kbd>M</kbd></td><td>음소거</td></tr>
+ <tr><td><kbd>R</kbd></td><td>앞뒤 2초 돌려보기</td></tr>
+ <tr><td><kbd>L</kbd></td><td>현재 구간 반복</td></tr>
+</table>
+</div>
+<div>
+<h3>마커 · 구간 · 파일</h3>
+<table>
+ <tr><td><kbd>S</kbd></td><td>현재 위치에 마커</td></tr>
+ <tr><td><kbd>Delete</kbd></td><td>가까운 마커 삭제</td></tr>
+ <tr><td><kbd>Ctrl+Z</kbd> <kbd>Ctrl+Y</kbd></td><td>실행 취소 · 다시 실행</td></tr>
+ <tr><td><kbd>E</kbd></td><td>현재 구간 켜기/끄기</td></tr>
+ <tr><td><kbd>Ctrl+Shift+M</kbd></td><td>무음 자동 마커</td></tr>
+ <tr><td><kbd>Ctrl</kbd>+휠</td><td>타임라인 확대/축소</td></tr>
+ <tr><td><kbd>Ctrl+0</kbd></td><td>전체 보기</td></tr>
+ <tr><td><kbd>Ctrl+O</kbd></td><td>영상 열기</td></tr>
+ <tr><td><kbd>Ctrl+E</kbd></td><td>모든 영상 내보내기</td></tr>
+ <tr><td><kbd>Ctrl+Shift+E</kbd></td><td>현재 영상만</td></tr>
+ <tr><td><kbd>Ctrl+↑</kbd> <kbd>Ctrl+↓</kbd></td><td>이전 · 다음 영상</td></tr>
+ <tr><td><kbd>F1</kbd></td><td>도움말</td></tr>
+</table>
+</div>
+</div>
+
+<h2 id="timeline">타임라인</h2>
+<div class="tl"><span class="s1">┃1      ▒▒▒▒▒▒▒▒▒▒▒</span><span class="m">▼</span><span class="s2">2 ✕    ░░░░░░░</span><span class="m">▼</span><span class="s3">3        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒</span>
+<span class="s1">┃  썸네일 썸네일 썸네일</span><span class="m">│</span><span class="s2">썸네일 썸네일 </span><span class="m">│</span><span class="s3">썸네일 썸네일 썸네일 썸네일</span>
+<span class="p">▲</span>00:00      00:30      01:00      01:30      02:00      02:30
+<span class="k">·     ·     ·     ·     ·     ·     ·     ·     ·     ·     ·</span>   ← 키프레임</div>
+<ul>
+ <li><b>흰 세로선 ▲</b> 현재 재생 위치(플레이헤드). 클릭하거나 드래그해서 옮깁니다.</li>
+ <li><b>빨간 세로선 ▼</b> 자르기 마커. 드래그해서 옮길 수 있고, 우클릭하면 지워집니다. 빈 곳 우클릭은 마커 추가.</li>
+ <li><b>색 블록과 번호</b> 구간. 번호 색은 오른쪽 목록의 번호 색과 같습니다. 꺼진 구간(✕)은 어둡습니다.</li>
+ <li><b>청록색 파형</b> 소리 크기. 낮게 깔린 곳이 조용한 부분입니다.</li>
+ <li><b>노란 테두리</b> 반복 재생 중인 구간.</li>
+ <li><b>눈금 아래 흰 점</b> 키프레임. 너무 촘촘하면 자동으로 숨깁니다. 보기 메뉴에서 끌 수 있습니다.</li>
+</ul>
+<h3>확대해서 정확히 찍기</h3>
+<p>한 시간짜리 영상은 타임라인 1픽셀이 3초쯤 됩니다. <kbd>Ctrl</kbd>+휠로 마우스 위치를 중심으로 확대하세요.
+확대되면 아래에 스크롤바가 나타나고, 휠만 굴리면 좌우로 이동합니다. 재생 중 플레이헤드가 화면 밖으로 나가면 자동으로 따라갑니다.
+상태 표시줄에 현재 배율이 보이고, <kbd>Ctrl+0</kbd> 으로 전체 보기로 돌아옵니다.</p>
+<h3>썸네일 미리보기</h3>
+<p>마우스를 올리거나 드래그하는 동안 그 위치의 썸네일과 시각이 팝업으로 뜹니다. 플레이어가 따라오기 전에 장면을 미리 보는 용도입니다.
+영상 길이에 따라 1초~수 초 간격으로 뽑은 썸네일이라 정확한 프레임은 플레이어에서 확인하세요.</p>
+<h3>시간 직접 입력</h3>
+<p>컨트롤 줄의 시간 표시를 클릭하면 입력란이 됩니다. <code>1:23.5</code> <code>01:02:03</code> <code>83.5</code> <code>1h2m3s</code> 어느 형식이든 쓰고 <kbd>Enter</kbd>.</p>
+
+<h2 id="markers">마커와 구간</h2>
+<p>마커는 영상 안의 한 시각입니다. 마커가 n개면 구간은 n+1개이고, 첫 구간은 0초부터, 마지막 구간은 영상 끝까지입니다.
+마커끼리 0.05초보다 가까우면 추가되지 않습니다. 마커는 프레임 경계에 맞춰 찍힙니다.</p>
+<table>
+ <tr><th>하고 싶은 것</th><th>방법</th></tr>
+ <tr><td>마커 찍기</td><td>재생 위치에서 <kbd>S</kbd> · 타임라인 빈 곳 우클릭</td></tr>
+ <tr><td>마커 옮기기</td><td>타임라인에서 드래그 (옮기는 동안 플레이어가 그 위치를 보여 줌)</td></tr>
+ <tr><td>마커 지우기</td><td>마커 위 우클릭 · 재생 위치에서 <kbd>Delete</kbd> (가장 가까운 마커)</td></tr>
+ <tr><td>구간 켜기/끄기</td><td>타임라인 <kbd>Ctrl</kbd>+클릭 · <kbd>E</kbd> · 목록 체크박스</td></tr>
+ <tr><td>구간 이름 정하기</td><td>목록의 파일명 칸 더블클릭. 비우면 자동 이름으로 돌아감</td></tr>
+ <tr><td>구간 확인</td><td>목록 더블클릭 또는 타임라인 더블클릭 → 그 구간만 반복 재생. <kbd>L</kbd> 로 해제</td></tr>
+ <tr><td>구간 사이 이동</td><td><kbd>↑</kbd> <kbd>↓</kbd> 또는 목록 클릭</td></tr>
+ <tr><td>전부 지우기</td><td>"모두 지우기" 버튼 (실행 취소 가능)</td></tr>
+ <tr><td>되돌리기</td><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd>. 마커 추가·이동·삭제, 구간 켜기/끄기, 이름 변경, 자동 마커 전부 대상</td></tr>
+</table>
+
+<h2 id="modes">자르기 모드</h2>
+<div class="grid2">
+ <div class="mode fast"><h4>빠르게</h4>원본 스트림을 그대로 복사(<code>-c copy</code>). 수 초 안에 끝나고 화질 손실이 전혀 없습니다.
+  대신 <b>키프레임에서만 시작</b>할 수 있어 시작점이 앞으로 당겨집니다(보통 1~2초, 화면 녹화는 더 길 수도). 끝점은 정확합니다.</div>
+ <div class="mode smart"><h4>스마트 (기본)</h4>시작점부터 다음 키프레임까지만 재인코딩하고 나머지는 복사한 뒤 이어 붙입니다.
+  빠르면서 프레임 단위로 정확하고, 재인코딩되는 부분은 1~2초뿐이라 화질 손실도 거의 없습니다. H.264 / HEVC 영상에서 동작하며 아니면 자동으로 "정확하게"로 넘어갑니다.</div>
+ <div class="mode precise"><h4>정확하게</h4>구간 전체를 H.264 CRF 18 로 재인코딩합니다. 가장 느리지만 어떤 영상이든, 어떤 플레이어에서든 문제없습니다.
+  GPU 인코더가 있으면 훨씬 빨라집니다. 출력은 항상 mp4.</div>
+ <div class="mode"><h4>어떤 걸 고를까</h4>대부분 <b>스마트</b>. 수 분 단위로 대충 나누기만 하면 <b>빠르게</b>. 스마트 결과가 특정 플레이어에서 이상하거나, 특이한 코덱(VP9, AV1, ProRes 등)이면 <b>정확하게</b>.
+  내보내기 로그에 각 파일이 실제로 어떤 방식으로 처리됐는지(복사 / 스마트 / 재인코딩) 표시됩니다.</div>
+</div>
+
+<h2 id="keyframe">키프레임 이야기</h2>
+<p>압축된 영상은 모든 프레임을 온전한 그림으로 저장하지 않습니다. 몇 초마다 한 장(<b>키프레임</b>, I-프레임)만 온전히 저장하고,
+그 사이 프레임들은 "앞 그림에서 바뀐 부분"만 저장합니다. 그래서 중간 프레임은 앞 키프레임부터 차례로 풀어야만 그려집니다.</p>
+<div class="tl">키프레임:  <span class="k">K</span>·····<span class="k">K</span>·····<span class="k">K</span>·····<span class="k">K</span>·····
+자르고 싶은 곳:      <span class="m">│</span>
+빠르게 모드 결과:  <span class="k">K</span>═════<span class="m">│</span>═══════════   ← 앞 키프레임부터 (앞에 여분이 붙음)
+스마트 모드 결과:      <span class="s3">▓▓▓</span><span class="k">K</span>═══════════   ← ▓ 부분만 새로 인코딩, 나머지 복사
+정확하게 결과:         <span class="s3">▓▓▓▓▓▓▓▓▓▓▓▓▓▓</span>   ← 전부 새로 인코딩</div>
+<p>키프레임 간격은 인코더 설정에 따라 다릅니다. 유튜브 다운로드·카메라 영상은 1~2초, OBS 기본값은 2초, 화면 녹화 프로그램 중에는 5~10초인 것도 있습니다.
+타임라인 눈금 아래 흰 점이 키프레임이고, 영상을 열 때 상태 표시줄에 "키프레임 N개, 평균 간격 x초"가 잠깐 표시됩니다.</p>
+<div class="card tip"><b>설정 ▸ 마커를 키프레임에 맞추기</b>를 켜면, 마커를 찍거나 옮길 때 0.5초 안에 키프레임이 있으면 거기에 달라붙습니다.
+이러면 "빠르게" 모드로도 정확하게 잘립니다. 키프레임 간격이 짧은 영상에서 유용합니다.</div>
+
+<h2 id="export">내보내기 옵션</h2>
+<table>
+ <tr><th style="width:170px">항목</th><th>설명</th></tr>
+ <tr><td>폴더</td><td>비워 두면 각 원본 옆 <code>원본이름_cuts</code>. 지정하면 모든 영상의 결과가 그 한 곳에 모입니다.</td></tr>
+ <tr><td>모드</td><td>빠르게 / 스마트 / 정확하게. 위 항목 참고.</td></tr>
+ <tr><td>출력</td><td>영상+오디오 / 오디오만 (m4a) / 오디오만 (mp3).</td></tr>
+ <tr><td>하나로 합치기</td><td>켜진 구간들을 순서대로 이어 붙여 파일 하나(<code>원본이름_merged</code>)로.</td></tr>
+ <tr><td>완료 후 폴더 열기</td><td>끝나면 탐색기로 출력 폴더를 엽니다.</td></tr>
+ <tr><td>현재 영상 / 모든 영상</td><td>선택된 영상만, 또는 목록 전체를 한 번에. 전체는 큐로 순서대로 처리되고 진행률에 <code>[3/12]</code> 처럼 표시됩니다.</td></tr>
+ <tr><td>취소</td><td>진행 중인 ffmpeg 를 멈추고 만들다 만 파일을 지웁니다.</td></tr>
+</table>
+<h3>파일 이름</h3>
+<p>기본 규칙은 <code>{name}_{n}</code> → <code>방송녹화_01.mp4</code>. <b>설정 ▸ 파일명 규칙</b>에서 바꿀 수 있습니다.</p>
+<table>
+ <tr><th>자리표시자</th><th>뜻</th><th>예</th></tr>
+ <tr><td><code>{name}</code></td><td>원본 파일 이름</td><td>방송녹화</td></tr>
+ <tr><td><code>{n}</code></td><td>구간 번호 (두 자리)</td><td>03</td></tr>
+ <tr><td><code>{start}</code> <code>{end}</code> <code>{dur}</code></td><td>시작 · 끝 · 길이</td><td>12m05s · 15m40s · 03m35s</td></tr>
+</table>
+<p>예: <code>{name}_{start}-{end}</code> → <code>방송녹화_12m05s-15m40s.mp4</code>. 구간 목록에서 직접 입력한 이름이 항상 우선합니다.
+확장자는 모드에 따라 정해집니다 (빠르게·스마트는 원본과 같게, 정확하게는 mp4, 오디오는 m4a/mp3).</p>
+<h3>같은 이름의 파일이 있으면</h3>
+<p>내보내기 전에 목록을 보여 주고 <b>덮어쓰기 / 번호 붙여 저장 (<code>이름_1.mp4</code>) / 취소</b> 중 고릅니다.</p>
+<h3>GPU 인코딩</h3>
+<p>시작할 때 NVIDIA NVENC → Intel QSV → AMD AMF 순으로 인코더를 시험해 보고, 되는 것을 상태 표시줄에 표시합니다.
+<b>설정 ▸ GPU 인코딩 사용</b>이 켜져 있으면 "정확하게"와 "스마트"의 재인코딩에 사용해 5~10배 빨라집니다.
+같은 용량에서의 화질은 CPU(libx264)가 조금 더 좋으니, 화질이 최우선이면 끄세요.</p>
+
+<h2 id="silence">무음 자동 마커</h2>
+<p><b>편집 ▸ 무음 구간에 자동 마커</b> (<kbd>Ctrl+Shift+M</kbd>, 또는 구간 목록 위 버튼). 오디오를 훑어서 기준 음량보다 작은 상태가 최소 길이 이상 이어지는 곳을 찾습니다.</p>
+<table>
+ <tr><th style="width:170px">설정</th><th>설명</th></tr>
+ <tr><td>무음 기준 음량</td><td>기본 -35 dB. 이보다 작으면 무음. 잡음 섞인 녹음은 -25 dB 쯤으로 올리고, 깨끗한 녹음은 -45 dB 까지 내려도 됩니다.</td></tr>
+ <tr><td>최소 무음 길이</td><td>기본 1초. 짧은 숨 고르기까지 잡고 싶으면 0.5초, 큰 단락만 원하면 3초 이상.</td></tr>
+ <tr><td>가운데에 마커 1개</td><td>무음 한가운데서 깔끔하게 나눕니다. 강의를 주제별로 나눌 때.</td></tr>
+ <tr><td>양쪽 끝에 마커 2개 + 무음 구간 끄기</td><td>무음 자체가 꺼진 구간이 됩니다. <b>하나로 합치기</b>와 같이 쓰면 "무음 제거 영상"이 됩니다.</td></tr>
+</table>
+<p>결과는 상태 표시줄에 "무음 구간 N개를 찾아 마커 M개 추가"로 표시되고, 마음에 안 들면 <kbd>Ctrl+Z</kbd> 한 번으로 전부 되돌아갑니다.</p>
+
+<h2 id="merge">합치기 · 오디오</h2>
+<h3>켜진 구간을 하나로 합치기</h3>
+<p>내보내기 패널의 <b>하나로 합치기</b>를 켜면 켜진 구간들을 각각 저장하는 대신 순서대로 이어 붙여 <code>원본이름_merged</code> 하나로 만듭니다.
+각 조각을 선택한 모드로 자른 뒤 재인코딩 없이 이어 붙이기 때문에 빠릅니다. "광고 빼고 한 편으로", "무음 제거" 용도입니다.</p>
+<h3>오디오만 추출</h3>
+<p><b>출력</b>을 "오디오만 (m4a)" 또는 "(mp3)" 로 바꾸면 영상 없이 소리만 저장합니다.
+m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192 kbps 로 변환. mp3 는 항상 LAME 고음질(VBR 2)로 변환합니다. 합치기와 같이 쓸 수 있습니다.</p>
+
+<h2 id="save">자동 저장 · 설정</h2>
+<h3>작업 파일 (.clipslicer.json)</h3>
+<p>마커·구간 켜짐·직접 정한 이름·마지막 재생 위치가 영상과 같은 폴더에 <code>영상이름.mp4.clipslicer.json</code> 으로 자동 저장됩니다
+(변경 후 0.6초 뒤, 영상 전환 시, 종료 시). 같은 영상을 다시 열면 그대로 복원되고 상태 표시줄에 "저장된 작업 복원"이 표시됩니다.
+이 json 파일을 창에 끌어다 놓아도 해당 영상이 열립니다. 영상을 다른 PC 로 옮길 때 같이 옮기면 작업이 유지됩니다.</p>
+<h3>설정 메뉴</h3>
+<table>
+ <tr><td>마커를 키프레임에 맞추기</td><td>마커를 가까운(0.5초 이내) 키프레임에 붙임. 기본 꺼짐.</td></tr>
+ <tr><td>GPU 인코딩 사용</td><td>감지된 하드웨어 인코더 사용. 기본 켜짐.</td></tr>
+ <tr><td>작업 자동 저장</td><td>끄면 .clipslicer.json 을 만들지 않습니다. 기본 켜짐.</td></tr>
+ <tr><td>파일명 규칙…</td><td>출력 파일 이름 패턴.</td></tr>
+ <tr><td>보기 ▸ 키프레임 표시</td><td>타임라인의 흰 점.</td></tr>
+</table>
+<p>창 크기·패널 비율·출력 폴더·모드·볼륨·최근 파일은 자동으로 기억됩니다 (Windows 레지스트리 <code>HKCU\Software\ClipSlicer</code>).</p>
+<h3>명령줄 · 파일 연결</h3>
+<p><code>ClipSlicer.exe "영상1.mp4" "영상2.mkv"</code> 처럼 인자로 넘기면 바로 열립니다.
+탐색기에서 영상 우클릭 → <b>연결 프로그램 ▸ 다른 앱 선택</b> 에서 ClipSlicer.exe 를 고르면 더블클릭으로 열 수 있습니다.</p>
+
+<h2 id="faq">문제 해결</h2>
+<table>
+ <tr><th style="width:260px">증상</th><th>원인과 해결</th></tr>
+ <tr><td>"빠르게"로 잘랐더니 앞부분이 길다</td><td>정상입니다. 키프레임 때문입니다. 스마트 모드를 쓰거나 "마커를 키프레임에 맞추기"를 켜세요.</td></tr>
+ <tr><td>잘린 파일의 처음 1~2초가 깨져 보인다</td><td>스마트 모드의 이음새를 일부 플레이어가 잘 못 다루는 경우입니다. "정확하게"로 다시 뽑으세요.</td></tr>
+ <tr><td>내보내기 실패 (로그에 ffmpeg 오류)</td><td>출력 폴더 쓰기 권한, 디스크 공간, 또는 MKV 의 자막·첨부 스트림을 MP4 로 복사하려는 경우. 마지막 경우는 "정확하게" 모드 사용.</td></tr>
+ <tr><td>영상이 안 열린다 / 화면이 까맣다</td><td>손상된 파일이나 DRM 파일은 안 됩니다. 화면만 까맣다면 그래픽 드라이버를 갱신해 보세요.</td></tr>
+ <tr><td>썸네일·파형이 안 생긴다</td><td>아주 긴 영상은 수십 초 걸립니다. 오디오가 없으면 파형이 없습니다. ffmpeg 가 PATH 나 bin 폴더에 있어야 합니다.</td></tr>
+ <tr><td>단축키가 안 먹는다</td><td>구간 목록의 파일명을 편집 중이면 키가 그쪽으로 갑니다. <kbd>Esc</kbd> 로 편집을 끝내거나 플레이어를 한 번 클릭하세요.</td></tr>
+ <tr><td>무음 구간을 못 찾는다</td><td>기준 음량을 올리거나(-25 dB), 최소 길이를 줄이세요. 배경음악이 깔린 영상은 무음이 없습니다.</td></tr>
+ <tr><td>GPU 인코더가 "없음"으로 나온다</td><td>그래픽 드라이버가 오래됐거나 ffmpeg 빌드에 해당 인코더가 없는 경우입니다. CPU 로도 모든 기능이 동작합니다.</td></tr>
+ <tr><td>"필요한 파일이 없습니다" 창</td><td><code>ffmpeg.exe</code> <code>ffprobe.exe</code> <code>libmpv-2.dll</code> 이 프로그램 폴더(또는 <code>bin</code>)에 있어야 합니다. 아래 설치 항목 참고.</td></tr>
+</table>
+
+<h2 id="install">설치 · 빌드</h2>
+<h3>배포판 (exe)</h3>
+<p><code>dist\ClipSlicer\</code> 폴더를 통째로 원하는 곳에 두고 <code>ClipSlicer.exe</code> 를 실행합니다. 설치 과정 없음, 레지스트리에는 설정값만 저장됩니다.</p>
+<h3>소스에서 실행</h3>
+<pre class="tl">git clone https://github.com/vtubeadmirer/clipslicer
+cd clipslicer
+pip install -r requirements.txt
+python tools\get_libmpv.py      # bin\libmpv-2.dll (7-Zip 또는 Bandizip 필요)
+python main.py</pre>
+<p>ffmpeg / ffprobe 는 <a href="https://www.gyan.dev/ffmpeg/builds/">gyan.dev 빌드</a>를 받아 PATH 에 넣거나 <code>bin\</code> 에 복사합니다.</p>
+<h3>exe 빌드</h3>
+<pre class="tl">.\build.ps1        # PyInstaller → dist\ClipSlicer\ClipSlicer.exe</pre>
+</main>
+</div>
+<footer>ClipSlicer · MIT · <a href="https://github.com/vtubeadmirer/clipslicer">github.com/vtubeadmirer/clipslicer</a> · ffmpeg 와 libmpv 는 각자의 라이선스를 따릅니다.</footer>
+</body>
+</html>
