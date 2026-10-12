@@ -18,12 +18,12 @@ import logging
 
 from .paths import make_settings
 from .logging_setup import log_dir
-from .dialogs import SilenceDialog, PatternDialog, ask_overwrite
+from .dialogs import SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, TimestampDialog, CropDialog, DownloadDialog
 from .help import HelpDialog
 from .player import MpvWidget
-from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN
+from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN, fmt_time_file
 from .timeline import TimelineWidget, seg_color
-from .workers import AnalyzeWorker, ExportWorker, ExportJob, ExportPart, SilenceWorker, GpuDetectWorker
+from .workers import AnalyzeWorker, ExportWorker, ExportJob, ExportPart, SilenceWorker, GpuDetectWorker, SceneWorker, DownloadWorker
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".ts", ".m4v", ".wmv", ".flv", ".mpg", ".mpeg", ".m2ts", ".mts"}
 COL_USE, COL_NO, COL_START, COL_END, COL_DUR, COL_NAME = range(6)
@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
         self.workers: dict[str, AnalyzeWorker] = {}
         self.export_worker: ExportWorker | None = None
         self.silence_worker: SilenceWorker | None = None
+        self.scene_worker: SceneWorker | None = None
         self.loop_idx = -1
         self.preview_active = False
         self.gpu_encoder: str | None = None
@@ -300,6 +301,11 @@ class MainWindow(QMainWindow):
         btn_silence.setFocusPolicy(Qt.NoFocus)
         btn_silence.clicked.connect(self.auto_markers_silence)
         head.addWidget(btn_silence)
+        btn_chap = QPushButton("챕터 복사")
+        btn_chap.setToolTip("켜진 구간을 '00:00 이름' 목록으로 클립보드에 복사 (유튜브 설명란용)")
+        btn_chap.setFocusPolicy(Qt.NoFocus)
+        btn_chap.clicked.connect(self.copy_chapters)
+        head.addWidget(btn_chap)
         btn_clear = QPushButton("모두 지우기")
         btn_clear.setToolTip("이 영상의 마커를 전부 삭제 (실행 취소 가능)")
         btn_clear.setFocusPolicy(Qt.NoFocus)
@@ -359,9 +365,16 @@ class MainWindow(QMainWindow):
         self.cb_audio.addItem("영상 + 오디오", "")
         self.cb_audio.addItem("오디오만 (m4a)", "aac")
         self.cb_audio.addItem("오디오만 (mp3)", "mp3")
+        self.cb_audio.addItem("세로 9:16 쇼츠 (재인코딩)", "vertical")
         self.cb_audio.setFocusPolicy(Qt.NoFocus)
-        self.cb_audio.currentIndexChanged.connect(lambda _i: self._refresh_table())
+        self.cb_audio.currentIndexChanged.connect(self._on_output_changed)
         optrow.addWidget(self.cb_audio)
+        self.btn_crop = QPushButton("크롭 위치…")
+        self.btn_crop.setToolTip("현재 화면에서 세로로 잘라낼 위치를 고릅니다")
+        self.btn_crop.setFocusPolicy(Qt.NoFocus)
+        self.btn_crop.clicked.connect(self.choose_crop)
+        self.btn_crop.hide()
+        optrow.addWidget(self.btn_crop)
         self.cb_merge = QCheckBox("하나로 합치기")
         self.cb_merge.setToolTip("켜진 구간들을 각각 저장하지 않고 순서대로 이어 붙여 파일 하나로 만듭니다")
         self.cb_merge.setFocusPolicy(Qt.NoFocus)
@@ -426,8 +439,17 @@ class MainWindow(QMainWindow):
         a.setShortcut(QKeySequence.Open)
         a.triggered.connect(self.open_files)
         m_file.addAction(a)
+        a = QAction("URL 에서 열기… (yt-dlp)", self)
+        a.setShortcut("Ctrl+L")
+        a.triggered.connect(self.open_url)
+        m_file.addAction(a)
         self.menu_recent = QMenu("최근 파일", self)
         m_file.addMenu(self.menu_recent)
+        m_file.addSeparator()
+        a = QAction("현재 화면을 PNG 로 저장", self)
+        a.setShortcut("Ctrl+P")
+        a.triggered.connect(self.save_screenshot)
+        m_file.addAction(a)
         m_file.addSeparator()
         a = QAction("현재 영상 내보내기", self)
         a.setShortcut("Ctrl+Shift+E")
@@ -463,6 +485,15 @@ class MainWindow(QMainWindow):
         a.setShortcut("E")
         a.triggered.connect(self.toggle_current_segment)
         m_edit.addAction(a)
+        m_edit.addSeparator()
+        a = QAction("클립 시작 (In)", self)
+        a.setShortcut("I")
+        a.triggered.connect(self.clip_in)
+        m_edit.addAction(a)
+        a = QAction("클립 끝 (Out) — 사이만 켜기", self)
+        a.setShortcut("O")
+        a.triggered.connect(self.clip_out)
+        m_edit.addAction(a)
         a = QAction("마커 모두 지우기", self)
         a.triggered.connect(self.clear_markers)
         m_edit.addAction(a)
@@ -470,6 +501,14 @@ class MainWindow(QMainWindow):
         a = QAction("무음 구간에 자동 마커…", self)
         a.setShortcut("Ctrl+Shift+M")
         a.triggered.connect(self.auto_markers_silence)
+        m_edit.addAction(a)
+        a = QAction("장면 전환에 자동 마커…", self)
+        a.setShortcut("Ctrl+Shift+S")
+        a.triggered.connect(self.auto_markers_scene)
+        m_edit.addAction(a)
+        a = QAction("타임스탬프 붙여넣기 → 마커…", self)
+        a.setShortcut("Ctrl+Shift+V")
+        a.triggered.connect(self.paste_timestamps)
         m_edit.addAction(a)
 
         m_view = mb.addMenu("보기(&V)")
@@ -498,6 +537,9 @@ class MainWindow(QMainWindow):
         m_set.addAction(self.act_gpu)
         self.act_autosave = QAction("작업 자동 저장 (.clipslicer.json)", self, checkable=True, checked=True)
         m_set.addAction(self.act_autosave)
+        self.act_cache = QAction("분석 결과 캐시 저장 (.clipslicer.cache)", self, checkable=True, checked=True)
+        self.act_cache.setToolTip("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다")
+        m_set.addAction(self.act_cache)
         self.act_compat = QAction("호환 모드 — 화면이 검게 나올 때 (재시작 필요)", self, checkable=True)
         self.act_compat.setChecked(self.settings.value("compat_mode", "0") == "1")
         self.act_compat.toggled.connect(self._on_compat_toggled)
@@ -550,6 +592,7 @@ class MainWindow(QMainWindow):
         sc("[", lambda: self._change_speed(-1))
         sc("]", lambda: self._change_speed(1))
         sc("\\", lambda: self.cb_speed.setCurrentIndex(SPEEDS.index(1.0)))
+        sc("Escape", self.clip_cancel)
         sc("Up", self._jump_segment_prev)
         sc("Down", self._jump_segment_next)
         sc("Ctrl+Up", lambda: self._select_file_offset(-1))
@@ -569,8 +612,10 @@ class MainWindow(QMainWindow):
         self.act_snap.setChecked(s.value("snap_keyframes", "0") == "1")
         self.act_gpu.setChecked(s.value("use_gpu", "1") == "1")
         self.act_autosave.setChecked(s.value("autosave", "1") == "1")
+        self.act_cache.setChecked(s.value("use_cache", "1") == "1")
         self.act_keyframes.setChecked(s.value("show_keyframes", "1") == "1")
         self.pattern = s.value("pattern", DEFAULT_PATTERN) or DEFAULT_PATTERN
+        self._on_output_changed(0)
         self.sl_volume.setValue(int(s.value("volume", 100)))
         geo = s.value("geometry")
         if geo:
@@ -590,6 +635,7 @@ class MainWindow(QMainWindow):
         s.setValue("snap_keyframes", "1" if self.act_snap.isChecked() else "0")
         s.setValue("use_gpu", "1" if self.act_gpu.isChecked() else "0")
         s.setValue("autosave", "1" if self.act_autosave.isChecked() else "0")
+        s.setValue("use_cache", "1" if self.act_cache.isChecked() else "0")
         s.setValue("show_keyframes", "1" if self.act_keyframes.isChecked() else "0")
         s.setValue("pattern", self.pattern)
         s.setValue("volume", self.sl_volume.value())
@@ -757,7 +803,7 @@ class MainWindow(QMainWindow):
                 it.setText(f"{os.path.basename(proj.path)}" + (f"   [{n}]" if proj.markers else ""))
 
     def _start_analyze(self, proj: ClipProject):
-        w = AnalyzeWorker(proj.path, proj.duration, self)
+        w = AnalyzeWorker(proj.path, proj.duration, self, use_cache=self.act_cache.isChecked())
         w.thumbsReady.connect(self._on_thumbs_ready)
         w.waveformReady.connect(self._on_waveform_ready)
         w.keyframesReady.connect(self._on_keyframes_ready)
@@ -834,6 +880,8 @@ class MainWindow(QMainWindow):
             self.current.dirty = True
             self._save_dirty()
         self._set_loop(-1)
+        if self.current:
+            self.current.pending_in = None
         self.current = proj
         self.stack.setCurrentWidget(self.player)
         self.player.load(path)
@@ -1087,6 +1135,152 @@ class MainWindow(QMainWindow):
             self._schedule_save()
         self.statusBar().showMessage(msg + " (Ctrl+Z 로 되돌리기)", 6000)
 
+    # ---- 클립 모드 (I/O) ----
+    def clip_in(self):
+        if not self.current:
+            return
+        self.current.pending_in = self._snap(self.player.position)
+        self.timeline.canvas.update()
+        self.statusBar().showMessage(f"클립 시작 {fmt_time(self.current.pending_in)} — 끝 지점에서 O (Esc 취소)", 6000)
+
+    def clip_out(self):
+        p = self.current
+        if not p:
+            return
+        if p.pending_in is None:
+            self.statusBar().showMessage("먼저 I 로 클립 시작을 찍으세요", 3000)
+            return
+        b = self._snap(self.player.position)
+        a = p.pending_in
+        if b < a:
+            a, b = b, a
+        p.push_undo()
+        self.player.pause()
+        ok = p.apply_clip(a, b)
+        p.pending_in = None
+        if ok:
+            self._set_loop(-1)
+            self._changed()
+            n = len(p.enabled_segments())
+            self.statusBar().showMessage(f"클립 {fmt_time(a)} ~ {fmt_time(b)} 추가 (켜진 구간 {n}개, 나머지는 꺼짐)", 6000)
+        else:
+            self.timeline.canvas.update()
+            self.statusBar().showMessage("클립이 너무 짧습니다 (0.1초 이상)", 3000)
+
+    def clip_cancel(self):
+        if self.current and self.current.pending_in is not None:
+            self.current.pending_in = None
+            self.timeline.canvas.update()
+            self.statusBar().showMessage("클립 시작 취소", 2000)
+
+    def copy_chapters(self):
+        if not self.current:
+            return
+        text = self.current.chapter_text()
+        if not text:
+            self.statusBar().showMessage("켜진 구간이 없습니다", 3000)
+            return
+        QApplication.clipboard().setText(text)
+        self.statusBar().showMessage(f"챕터 {text.count(chr(10)) + 1}줄을 클립보드에 복사했습니다", 4000)
+
+    # ---- 화면 저장 / 세로 크롭 ----
+    def save_screenshot(self):
+        if not self.current:
+            return
+        t = self.player.position
+        try:
+            data = ffmpeg_tools.grab_frame(self.current.path, t, "png")
+        except Exception as ex:
+            QMessageBox.warning(self, "화면 저장", f"프레임을 읽지 못했습니다.\n{ex}")
+            return
+        out = os.path.join(os.path.dirname(self.current.path), f"{self.current.stem}_{fmt_time_file(t)}.png")
+        out = self._unique_path(out) if os.path.exists(out) else out
+        with open(out, "wb") as f:
+            f.write(data)
+        self.statusBar().showMessage(f"저장: {os.path.basename(out)}", 5000)
+
+    def _on_output_changed(self, _i: int):
+        vertical = self.cb_audio.currentData() == "vertical"
+        self.btn_crop.setVisible(vertical)
+        self.cb_mode.setEnabled(not vertical)
+        self.cb_mode.setToolTip("세로 출력은 항상 재인코딩합니다" if vertical else self.cb_mode.toolTip())
+        self._refresh_table()
+
+    def choose_crop(self):
+        if not self.current:
+            return
+        try:
+            data = ffmpeg_tools.grab_frame(self.current.path, self.player.position, "jpeg")
+        except Exception as ex:
+            QMessageBox.warning(self, "크롭 위치", f"프레임을 읽지 못했습니다.\n{ex}")
+            return
+        pix = QPixmap()
+        pix.loadFromData(data, "JPEG")
+        d = CropDialog(self, pix, self.current.crop_x)
+        if d.exec():
+            self.current.crop_x = d.frac
+            self._schedule_save()
+            self.statusBar().showMessage(f"세로 크롭 위치 {d.frac * 100:.0f}%", 3000)
+
+    # ---- 타임스탬프 / 장면 전환 ----
+    def paste_timestamps(self):
+        if not self.current:
+            return
+        d = TimestampDialog(self, self.current.duration)
+        d.text.setPlainText(QApplication.clipboard().text()[:20000])
+        if not d.exec() or not d.times:
+            return
+        self.current.push_undo()
+        n = self.current.add_markers([self._snap(t) for t in d.times])
+        self._set_loop(-1)
+        self._changed()
+        self.statusBar().showMessage(f"타임스탬프 {len(d.times)}개 중 마커 {n}개 추가 (Ctrl+Z 로 되돌리기)", 6000)
+
+    def auto_markers_scene(self):
+        if not self.current:
+            return
+        if self.scene_worker and self.scene_worker.isRunning():
+            return
+        d = SceneDialog(self, float(self.settings.value("scene_th", 0.4)), float(self.settings.value("scene_gap", 2.0)))
+        if not d.exec():
+            return
+        self.settings.setValue("scene_th", d.threshold)
+        self.settings.setValue("scene_gap", d.min_gap)
+        self.progress.setValue(0)
+        self.progress.setFormat("장면 전환 분석 %p%")
+        self.statusBar().showMessage("장면 전환 분석 중… (내보내기 패널 진행률)")
+        self.scene_worker = SceneWorker(self.current.path, self.current.duration, d.threshold, d.min_gap, self)
+        self.scene_worker.progress.connect(lambda f: self.progress.setValue(int(f * 1000)))
+        self.scene_worker.done.connect(self._on_scene_done)
+        self.scene_worker.start()
+
+    def _on_scene_done(self, path: str, times: list):
+        self.progress.setFormat("%p%")
+        proj = self.projects.get(os.path.abspath(path))
+        if not proj:
+            return
+        times = [t for t in times if 0.5 < t < proj.duration - 0.5]
+        if not times:
+            self.statusBar().showMessage("장면 전환을 찾지 못했습니다. 민감도를 낮춰 보세요.", 5000)
+            return
+        proj.push_undo()
+        n = proj.add_markers([self._snap(t) for t in times])
+        if proj is self.current:
+            self._set_loop(-1)
+            self._changed()
+        self.statusBar().showMessage(f"장면 전환 {len(times)}개 → 마커 {n}개 추가 (Ctrl+Z 로 되돌리기)", 6000)
+
+    # ---- URL 다운로드 ----
+    def open_url(self):
+        default_dir = self.settings.value("dl_dir", "") or os.path.join(
+            os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
+        d = DownloadDialog(self, lambda u, o, q: DownloadWorker(u, o, q, self), default_dir,
+                           self.settings.value("dl_quality", "best"))
+        if d.exec() and d.result_path:
+            self.settings.setValue("dl_dir", d.out_dir)
+            self.settings.setValue("dl_quality", d.quality)
+            self.add_files([d.result_path])
+
     # ---- 구간 반복 / 미리보기 ----
     def _set_loop(self, idx: int):
         self.loop_idx = idx
@@ -1164,6 +1358,8 @@ class MainWindow(QMainWindow):
             return ".m4a"
         if audio == "mp3":
             return ".mp3"
+        if audio == "vertical":
+            return ".mp4"
         if self._mode() == "precise":
             return ".mp4"
         return self.current.ext if self.current else ".mp4"
@@ -1264,17 +1460,20 @@ class MainWindow(QMainWindow):
 
     def _build_jobs(self, projects: list[ClipProject]) -> list[ExportJob]:
         mode = self._mode()
-        audio = self.cb_audio.currentData()
+        out_kind = self.cb_audio.currentData()
+        vertical = out_kind == "vertical"
+        audio = "" if vertical else out_kind
         merge = self.cb_merge.isChecked()
         gpu = self.gpu_encoder if self.act_gpu.isChecked() else None
         jobs: list[ExportJob] = []
         for proj in projects:
             if audio:
                 ext = ".m4a" if audio == "aac" else ".mp3"
-            elif mode == "precise":
+            elif mode == "precise" or vertical:
                 ext = ".mp4"
             else:
                 ext = proj.ext
+            vert = proj.crop_x if vertical else None
             outdir = self._out_dir_for(proj)
             segs = proj.enabled_segments()
             if not segs:
@@ -1282,14 +1481,14 @@ class MainWindow(QMainWindow):
             if merge:
                 dst = os.path.join(outdir, f"{proj.stem}_merged{ext}")
                 jobs.append(ExportJob(proj.path, proj.info, proj.keyframes,
-                                      [ExportPart(s.start, s.end) for _, s in segs], dst, mode, audio, gpu))
+                                      [ExportPart(s.start, s.end) for _, s in segs], dst, mode, audio, vert, gpu))
             else:
                 for i, seg in segs:
                     dst = os.path.join(outdir, proj.output_name(i, ext, self.pattern))
                     if os.path.abspath(dst) == os.path.abspath(proj.path):
                         dst = os.path.join(outdir, f"{proj.stem}_cut{ext}")
                     jobs.append(ExportJob(proj.path, proj.info, proj.keyframes,
-                                          [ExportPart(seg.start, seg.end)], dst, mode, audio, gpu))
+                                          [ExportPart(seg.start, seg.end)], dst, mode, audio, vert, gpu))
         return jobs
 
     @staticmethod
@@ -1323,6 +1522,8 @@ class MainWindow(QMainWindow):
         extra = []
         if jobs[0].audio:
             extra.append("오디오만")
+        if jobs[0].vertical is not None:
+            extra.append("세로 9:16")
         if self.cb_merge.isChecked():
             extra.append("합치기")
         if jobs[0].gpu and jobs[0].mode != "fast" and not jobs[0].audio:

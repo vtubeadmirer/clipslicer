@@ -49,6 +49,21 @@ def parse_time(text: str) -> float | None:
     return total
 
 
+_TS_RE = re.compile(r"(?<![\d:])(?:(\d{1,2}):)?(\d{1,3}):(\d{2})(?:[.,](\d{1,3}))?(?![\d:])")
+
+
+def parse_timestamps(text: str) -> list[float]:
+    """텍스트 안의 h:mm:ss / mm:ss(.ms) 시각을 모두 찾아 초 단위 정렬 목록으로 (중복 제거)."""
+    found = set()
+    for m in _TS_RE.finditer(text or ""):
+        h, mi, s, frac = m.groups()
+        t = int(h or 0) * 3600 + int(mi) * 60 + int(s)
+        if frac:
+            t += int(frac.ljust(3, "0")[:3]) / 1000
+        found.add(round(t, 3))
+    return sorted(found)
+
+
 def safe_filename(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "clip"
 
@@ -79,6 +94,9 @@ class ClipProject:
     thumbs: list = field(default_factory=list)   # [(time, QPixmap)]
     waveform: object = None                      # list[float] | None
     keyframes: list[float] = field(default_factory=list)
+    clips: list[tuple[float, float]] = field(default_factory=list)   # I/O 로 지정한 클립 구간
+    pending_in: float | None = None                                  # I 만 찍고 O 를 기다리는 중
+    crop_x: float = 0.5                                              # 세로 크롭 위치 (0~1)
     last_position: float = 0.0
     undo_stack: list = field(default_factory=list)
     redo_stack: list = field(default_factory=list)
@@ -141,7 +159,37 @@ class ClipProject:
 
     def clear_markers(self):
         self.markers.clear()
+        self.clips.clear()
+        self.pending_in = None
         self.rebuild_segments()
+
+    # ---- 클립 모드 (I/O) ----
+    def apply_clip(self, a: float, b: float) -> bool:
+        """[a, b] 를 클립으로 등록: 양 끝에 마커를 찍고, 클립에 속한 구간만 켠다."""
+        if b - a < 0.1:
+            return False
+        a = max(0.0, a)
+        b = min(self.duration, b)
+        for t in (a, b):
+            if 0 < t < self.duration:
+                self.add_marker(t)
+        self.clips.append((a, b))
+        self.clips.sort()
+        self._apply_clip_enables()
+        return True
+
+    def _apply_clip_enables(self):
+        for s in self.segments:
+            s.enabled = any(s.start >= ca - 0.02 and s.end <= cb + 0.02 for ca, cb in self.clips)
+
+    def chapter_text(self) -> str:
+        """유튜브 설명란용 '00:00 이름' 목록 (켜진 구간)."""
+        lines = []
+        for i, s in enumerate(self.segments):
+            if s.enabled:
+                name = s.name.strip() or f"구간 {i + 1}"
+                lines.append(f"{fmt_time(s.start, ms=False).rjust(5, '0') if s.start < 3600 else fmt_time(s.start, ms=False)} {name}")
+        return "\n".join(lines)
 
     # ---- 구간 ----
     def rebuild_segments(self):
@@ -183,10 +231,12 @@ class ClipProject:
 
     # ---- 실행 취소 ----
     def snapshot(self) -> tuple:
-        return (tuple(self.markers), tuple((s.start, s.enabled, s.name) for s in self.segments))
+        return (tuple(self.markers), tuple((s.start, s.enabled, s.name) for s in self.segments), tuple(self.clips))
 
     def restore(self, snap: tuple):
-        markers, segs = snap
+        markers, segs = snap[0], snap[1]
+        self.clips = [tuple(c) for c in snap[2]] if len(snap) > 2 else []
+        self.pending_in = None
         self.markers = list(markers)
         self.segments = []
         self.rebuild_segments()
@@ -227,6 +277,8 @@ class ClipProject:
             "duration": self.duration,
             "markers": self.markers,
             "segments": [{"start": s.start, "enabled": s.enabled, "name": s.name} for s in self.segments],
+            "clips": [list(c) for c in self.clips],
+            "crop_x": self.crop_x,
             "last_position": self.last_position,
         }
 
@@ -255,6 +307,8 @@ class ClipProject:
             if d:
                 s.enabled = bool(d.get("enabled", True))
                 s.name = str(d.get("name", ""))
+        self.clips = [(float(a), float(b)) for a, b in data.get("clips", [])]
+        self.crop_x = float(data.get("crop_x", 0.5))
         self.last_position = float(data.get("last_position", 0.0))
         self.dirty = False
         return True

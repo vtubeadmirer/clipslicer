@@ -51,7 +51,7 @@
 <header><div class="in">
   <div class="logo"><div class="film"></div><div class="line"></div></div>
   <div><h1>ClipSlicer 사용 설명서</h1>
-  <p>마커만 찍으면 구간별로 잘라 주는 가벼운 Windows 영상 자르기 도구 · 버전 0.2</p></div>
+  <p>마커만 찍으면 구간별로 잘라 주는 가벼운 Windows 영상 자르기 도구 · 버전 0.4</p></div>
 </div></header>
 
 <div class="wrap">
@@ -59,11 +59,11 @@
   <div class="grp">기본</div>
   <a href="#intro">소개</a><a href="#start">5분 안에 시작하기</a><a href="#screen">화면 구성</a>
   <div class="grp">조작</div>
-  <a href="#keys">단축키</a><a href="#timeline">타임라인</a><a href="#markers">마커와 구간</a>
+  <a href="#keys">단축키</a><a href="#timeline">타임라인</a><a href="#markers">마커와 구간</a><a href="#clip">클립 모드</a>
   <div class="grp">내보내기</div>
   <a href="#modes">자르기 모드</a><a href="#keyframe">키프레임 이야기</a><a href="#export">내보내기 옵션</a>
   <div class="grp">편의 기능</div>
-  <a href="#silence">무음 자동 마커</a><a href="#merge">합치기 · 오디오</a><a href="#save">자동 저장 · 설정</a>
+  <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#save">자동 저장 · 설정</a>
   <div class="grp">기타</div>
   <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
 </nav>
@@ -124,10 +124,14 @@
 <h3>마커 · 구간 · 파일</h3>
 <table>
  <tr><td><kbd>S</kbd></td><td>현재 위치에 마커</td></tr>
+ <tr><td><kbd>I</kbd> <kbd>O</kbd></td><td>클립 시작 · 끝 (사이만 켜기)</td></tr>
  <tr><td><kbd>Delete</kbd></td><td>가까운 마커 삭제</td></tr>
  <tr><td><kbd>Ctrl+Z</kbd> <kbd>Ctrl+Y</kbd></td><td>실행 취소 · 다시 실행</td></tr>
  <tr><td><kbd>E</kbd></td><td>현재 구간 켜기/끄기</td></tr>
- <tr><td><kbd>Ctrl+Shift+M</kbd></td><td>무음 자동 마커</td></tr>
+ <tr><td><kbd>Ctrl+Shift+M</kbd> <kbd>Ctrl+Shift+S</kbd></td><td>무음 · 장면 전환 자동 마커</td></tr>
+ <tr><td><kbd>Ctrl+Shift+V</kbd></td><td>타임스탬프 붙여넣기 → 마커</td></tr>
+ <tr><td><kbd>Ctrl+L</kbd></td><td>URL 에서 열기</td></tr>
+ <tr><td><kbd>Ctrl+P</kbd></td><td>현재 화면 PNG 저장</td></tr>
  <tr><td><kbd>Ctrl</kbd>+휠</td><td>타임라인 확대/축소</td></tr>
  <tr><td><kbd>Ctrl+0</kbd></td><td>전체 보기</td></tr>
  <tr><td><kbd>Ctrl+O</kbd></td><td>영상 열기</td></tr>
@@ -177,6 +181,14 @@
  <tr><td>전부 지우기</td><td>"모두 지우기" 버튼 (실행 취소 가능)</td></tr>
  <tr><td>되돌리기</td><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd>. 마커 추가·이동·삭제, 구간 켜기/끄기, 이름 변경, 자동 마커 전부 대상</td></tr>
 </table>
+
+<h2 id="clip">클립 모드 (I / O)</h2>
+<p>긴 영상을 "나누는" 게 아니라 쓸 부분만 "뽑을" 때는 클립 모드가 빠릅니다. 재생하다가 시작 지점에서 <kbd>I</kbd>, 끝 지점에서 <kbd>O</kbd>.
+타임라인에 초록 점선으로 시작점이 표시되고, O 를 누르는 순간 양쪽에 마커가 찍히면서 <b>그 사이만 켜지고 나머지는 전부 꺼집니다</b>.
+반복하면 클립이 쌓이고, 내보내기에서 <b>하나로 합치기</b>를 켜면 하이라이트 모음 한 편이 됩니다. <kbd>Esc</kbd> 로 찍다 만 시작점을 취소합니다.</p>
+<div class="tl"><span class="s1">▒▒▒▒▒▒▒▒</span><span class="m">▼</span><span class="s2">████ 클립 1 ████</span><span class="m">▼</span><span class="s1">▒▒▒▒▒▒▒▒▒▒▒▒</span><span class="m">▼</span><span class="s3">███ 클립 2 ███</span><span class="m">▼</span><span class="s1">▒▒▒▒</span>
+  (꺼짐)        I ───── O        (꺼짐)         I ──── O     (꺼짐)</div>
+<p>클립 모드로 만든 구간도 보통 구간과 똑같이 다룰 수 있습니다 (끄기, 이름, 마커 이동, 실행 취소). 클립 목록은 작업 파일에 저장됩니다.</p>
 
 <h2 id="modes">자르기 모드</h2>
 <div class="grid2">
@@ -242,13 +254,32 @@
 </table>
 <p>결과는 상태 표시줄에 "무음 구간 N개를 찾아 마커 M개 추가"로 표시되고, 마음에 안 들면 <kbd>Ctrl+Z</kbd> 한 번으로 전부 되돌아갑니다.</p>
 
-<h2 id="merge">합치기 · 오디오</h2>
+<h3>장면 전환 자동 마커</h3>
+<p><b>편집 ▸ 장면 전환에 자동 마커</b> (<kbd>Ctrl+Shift+S</kbd>). 화면이 크게 바뀌는 지점(컷, 화면 전환)을 찾습니다. 영상 전체를 작은 해상도로 훑어서
+1시간 영상에 1~3분 정도 걸리고, 진행률이 내보내기 패널에 표시됩니다. 민감도(0~1)는 낮을수록 작은 변화도 잡습니다. 0.3~0.5 권장.</p>
+<h3>타임스탬프 붙여넣기</h3>
+<p><b>편집 ▸ 타임스탬프 붙여넣기</b> (<kbd>Ctrl+Shift+V</kbd>). 유튜브 챕터·댓글 타임라인 같은 텍스트에서 <code>12:34</code> <code>1:02:03</code> <code>0:45.5</code> 를 모두 찾아 마커로. 클립보드가 자동으로 채워집니다.</p>
+<h3>챕터 복사</h3>
+<p>구간 목록 위 <b>챕터 복사</b>: 켜진 구간을 <code>00:00 이름</code> 목록으로 복사. 유튜브 설명란에 붙이면 챕터가 됩니다.</p>
+
+<h2 id="merge">합치기 · 오디오 · 쇼츠</h2>
 <h3>켜진 구간을 하나로 합치기</h3>
 <p>내보내기 패널의 <b>하나로 합치기</b>를 켜면 켜진 구간들을 각각 저장하는 대신 순서대로 이어 붙여 <code>원본이름_merged</code> 하나로 만듭니다.
 각 조각을 선택한 모드로 자른 뒤 재인코딩 없이 이어 붙이기 때문에 빠릅니다. "광고 빼고 한 편으로", "무음 제거" 용도입니다.</p>
 <h3>오디오만 추출</h3>
 <p><b>출력</b>을 "오디오만 (m4a)" 또는 "(mp3)" 로 바꾸면 영상 없이 소리만 저장합니다.
 m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192 kbps 로 변환. mp3 는 항상 LAME 고음질(VBR 2)로 변환합니다. 합치기와 같이 쓸 수 있습니다.</p>
+
+<h3>세로 9:16 쇼츠 출력</h3>
+<p><b>출력</b>을 "세로 9:16 쇼츠 (재인코딩)" 로 바꾸면 각 구간이 1080×1920 세로 영상으로 나옵니다. <b>크롭 위치…</b> 에서 현재 화면 위의 노란 창을 드래그해
+남길 부분을 고릅니다. 위치는 영상마다 작업 파일에 저장됩니다. 항상 재인코딩이라 자르기 방식은 무시되고, GPU 인코더가 있으면 씁니다.</p>
+<h3>현재 화면 저장</h3>
+<p><kbd>Ctrl+P</kbd>: 지금 보이는 프레임을 영상 옆에 <code>이름_12m05s.png</code> 로 저장합니다. 썸네일 만들 때 유용합니다.</p>
+
+<h2 id="url">URL 에서 열기</h2>
+<p><b>파일 ▸ URL 에서 열기</b> (<kbd>Ctrl+L</kbd>). 유튜브·치지직·트위치 VOD·아프리카 등 <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">yt-dlp 가 지원하는 사이트</a>의 주소를 넣으면
+받아서 바로 목록에 추가합니다. 화질과 저장 폴더를 고를 수 있고 기본은 <code>내 비디오\ClipSlicer</code> 입니다. 받은 파일은 지우지 않습니다.</p>
+<div class="card warn">로그인이 필요한 영상, 회원 전용 다시보기, DRM 영상은 받을 수 없습니다. 사이트가 바뀌면 yt-dlp 갱신이 필요할 수 있는데, 새 ClipSlicer 릴리스에 최신 버전이 포함됩니다.</div>
 
 <h2 id="save">자동 저장 · 설정</h2>
 <h3>작업 파일 (.clipslicer.json)</h3>
@@ -260,6 +291,7 @@ m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192 kbps 로 변환. m
  <tr><td>마커를 키프레임에 맞추기</td><td>마커를 가까운(0.5초 이내) 키프레임에 붙임. 기본 꺼짐.</td></tr>
  <tr><td>GPU 인코딩 사용</td><td>감지된 하드웨어 인코더 사용. 기본 켜짐.</td></tr>
  <tr><td>작업 자동 저장</td><td>끄면 .clipslicer.json 을 만들지 않습니다. 기본 켜짐.</td></tr>
+ <tr><td>분석 결과 캐시 저장</td><td>썸네일·파형·키프레임을 영상 옆 <code>.clipslicer.cache</code> 에 저장. 다음에 열 때 즉시 표시. 영상이 바뀌면 자동 갱신.</td></tr>
  <tr><td>호환 모드</td><td>GPU 가속 없이 재생 화면을 그립니다. 화면이 검게만 나올 때. 재시작 필요.</td></tr>
  <tr><td>파일명 규칙…</td><td>출력 파일 이름 패턴.</td></tr>
  <tr><td>보기 ▸ 키프레임 표시</td><td>타임라인의 흰 점.</td></tr>

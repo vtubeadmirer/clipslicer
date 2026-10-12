@@ -169,6 +169,7 @@ class TimelineCanvas(QWidget):
         if self.show_keyframes:
             self._draw_keyframes(p, h)
         self._draw_markers(p, h)
+        self._draw_pending_in(p, h)
         self._draw_playhead(p, h)
         if self.hover_x >= 0 and not self.scrubbing and self.drag_marker < 0:
             p.setPen(QPen(QColor(255, 255, 255, 90), 1))
@@ -317,6 +318,24 @@ class TimelineCanvas(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(QBrush(col))
             p.drawPolygon(tri)
+
+    def _draw_pending_in(self, p: QPainter, h: int):
+        t = self.project.pending_in
+        if t is None or t < self.view_start or t > self.view_start + self.view_len:
+            return
+        x = int(self.t_to_x(t))
+        pen = QPen(QColor(102, 187, 106), 2, Qt.DashLine)
+        p.setPen(pen)
+        p.drawLine(x, 0, x, h)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(102, 187, 106))
+        p.drawRect(x, 0, 14, 14)
+        p.setPen(QColor(0, 0, 0))
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        p.setFont(font)
+        p.drawText(QRectF(x, 0, 14, 14), Qt.AlignCenter, "I")
 
     def _draw_playhead(self, p: QPainter, h: int):
         x = int(self.t_to_x(self.position))

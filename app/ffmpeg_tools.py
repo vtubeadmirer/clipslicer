@@ -148,6 +148,62 @@ def detect_silence(path: str, noise_db: float = -35.0, min_dur: float = 1.0) -> 
     return spans
 
 
+def detect_scenes(path: str, duration: float, threshold: float = 0.4, min_gap: float = 2.0,
+                  on_progress: ProgressCb | None = None, cancel=None) -> list[float]:
+    """장면 전환 시각 목록. 작은 해상도로 줄여서 전체를 훑는다 (길이에 비례해 시간이 걸림)."""
+    # scdet 은 모든 프레임을 통과시키므로 -progress 가 정확하고, 전환 지점은 로그로 알려 준다.
+    # scdet 점수는 평균 프레임 차(0~255 스케일, 기본 임계값 10) → UI 의 0~1 민감도를 ×25 로 맞춘다.
+    cmd = [find_tool("ffmpeg"), "-hide_banner", "-nostats", "-v", "info", "-i", path, "-an", "-sn",
+           "-vf", f"scale=160:-2,scdet=threshold={threshold * 25:.2f}", "-progress", "pipe:1", "-f", "null", "-"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", **_popen_kwargs())
+    times: list[float] = []
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        if cancel is not None and cancel():
+            proc.kill()
+            break
+        m = re.search(r"lavfi\.scd\.time:\s*([0-9.]+)", line)
+        if m:
+            t = float(m.group(1))
+            if not times or t - times[-1] >= min_gap:
+                times.append(t)
+        elif on_progress and line.startswith("out_time_us="):
+            try:
+                on_progress(min(int(line.split("=", 1)[1]) / 1e6 / max(duration, 0.01), 1.0))
+            except ValueError:
+                pass
+    proc.wait()
+    return times
+
+
+def grab_frame(path: str, t: float, fmt: str = "png") -> bytes:
+    """t 초의 프레임 한 장 (png/jpeg 바이트)."""
+    codec = "png" if fmt == "png" else "mjpeg"
+    cmd = [find_tool("ffmpeg"), "-v", "error", "-ss", f"{max(t, 0):.3f}", "-i", path, "-an", "-sn",
+           "-frames:v", "1", "-f", "image2", "-c:v", codec, "-"]
+    proc = subprocess.run(cmd, capture_output=True, **_popen_kwargs())
+    if proc.returncode != 0 or not proc.stdout:
+        raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip() or "프레임을 읽지 못했습니다")
+    return proc.stdout
+
+
+def vertical_crop_filter(width: int, height: int, frac: float, out_w: int = 1080, out_h: int = 1920) -> str:
+    """9:16 크롭 + 스케일 필터. frac 은 가로(또는 세로) 위치 0~1."""
+    frac = min(1.0, max(0.0, frac))
+    if width / max(height, 1) > 9 / 16:
+        cw = int(height * 9 / 16) // 2 * 2
+        ch = height // 2 * 2
+        cx = int((width - cw) * frac) // 2 * 2
+        cy = 0
+    else:
+        cw = width // 2 * 2
+        ch = int(width * 16 / 9) // 2 * 2
+        cx = 0
+        cy = int((height - ch) * frac) // 2 * 2
+    return f"crop={cw}:{ch}:{cx}:{cy},scale={out_w}:{out_h}:flags=lanczos"
+
+
 # --------------------------------------------------------------------------- 인코더
 _GPU_CACHE: dict[str, str | None] = {}
 
@@ -330,6 +386,12 @@ class Cutter:
         cmd += audio_args if audio_args is not None else AUDIO_ENCODERS["aac"]
         cmd += ["-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "-progress", "pipe:1", dst]
         self._step(cmd, end - start, cb)
+
+    def cut_vertical(self, src: str, start: float, end: float, dst: str, info: dict, frac: float,
+                     cb: ProgressCb, gpu: str | None = None):
+        """세로 9:16 (1080x1920) 재인코딩 출력."""
+        vf = vertical_crop_filter(info.get("width", 1920), info.get("height", 1080), frac)
+        self.cut_encode(src, start, end, dst, cb, "h264", gpu, extra_video=["-vf", vf, "-pix_fmt", "yuv420p"])
 
     def cut_smart(self, src: str, start: float, end: float, dst: str, info: dict, kfs: list[float],
                   cb: ProgressCb, gpu: str | None = None) -> str:

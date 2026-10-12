@@ -18,6 +18,7 @@ $ErrorActionPreference = "Continue"
   --manifest assets\ClipSlicer.manifest `
   --add-binary "bin\libmpv-2.dll;." `
   --add-data "bin\ffmpeg;ffmpeg" `
+  --collect-submodules yt_dlp `
   --exclude-module PIL --exclude-module numpy --exclude-module tkinter `
   --exclude-module yaml --exclude-module psutil `
   --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtPdf `

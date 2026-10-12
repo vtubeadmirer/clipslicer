@@ -10,7 +10,7 @@ import logging
 
 from PySide6.QtCore import QThread, Signal
 
-from . import ffmpeg_tools
+from . import ffmpeg_tools, cache
 from .ffmpeg_tools import Cutter, Cancelled
 
 LOG = logging.getLogger("clipslicer")
@@ -22,12 +22,21 @@ class AnalyzeWorker(QThread):
     waveformReady = Signal(str, object)    # path, list[float] | None
     keyframesReady = Signal(str, list)     # path, [t, ...]
 
-    def __init__(self, path: str, duration: float, parent=None):
+    def __init__(self, path: str, duration: float, parent=None, use_cache: bool = True):
         super().__init__(parent)
         self.path = path
         self.duration = duration
+        self.use_cache = use_cache
 
     def run(self):
+        if self.use_cache:
+            data = cache.load(self.path)
+            if data:
+                LOG.info("분석 캐시 사용: %s", self.path)
+                self.thumbsReady.emit(self.path, data["thumbs"])
+                self.waveformReady.emit(self.path, data["waveform"])
+                self.keyframesReady.emit(self.path, data["keyframes"])
+                return
         try:
             thumbs = ffmpeg_tools.extract_thumbnails(self.path, self.duration)
         except Exception:
@@ -41,10 +50,13 @@ class AnalyzeWorker(QThread):
             wave = None
         self.waveformReady.emit(self.path, wave)
         try:
-            self.keyframesReady.emit(self.path, ffmpeg_tools.keyframes(self.path))
+            kfs = ffmpeg_tools.keyframes(self.path)
         except Exception:
             LOG.exception("키프레임 실패: %s", self.path)
-            self.keyframesReady.emit(self.path, [])
+            kfs = []
+        self.keyframesReady.emit(self.path, kfs)
+        if self.use_cache and (thumbs or wave is not None or kfs):
+            cache.save(self.path, thumbs, wave, kfs)
 
 
 class SilenceWorker(QThread):
@@ -61,6 +73,121 @@ class SilenceWorker(QThread):
             LOG.exception("무음 감지 실패: %s", self.path)
             spans = []
         self.done.emit(self.path, spans)
+
+
+class SceneWorker(QThread):
+    progress = Signal(float)
+    done = Signal(str, list)  # path, [t, ...]
+
+    def __init__(self, path: str, duration: float, threshold: float, min_gap: float, parent=None):
+        super().__init__(parent)
+        self.path, self.duration, self.threshold, self.min_gap = path, duration, threshold, min_gap
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def run(self):
+        try:
+            times = ffmpeg_tools.detect_scenes(self.path, self.duration, self.threshold, self.min_gap,
+                                               self.progress.emit, lambda: self._cancel)
+        except Exception:
+            LOG.exception("장면 전환 감지 실패: %s", self.path)
+            times = []
+        self.done.emit(self.path, [] if self._cancel else times)
+
+
+class DownloadWorker(QThread):
+    """yt-dlp 로 URL 다운로드. progress(0~1, 상태글), done(파일경로 또는 '', 오류)."""
+    progress = Signal(float, str)
+    done = Signal(str, str)
+
+    def __init__(self, url: str, out_dir: str, quality: str = "best", parent=None):
+        super().__init__(parent)
+        self.url, self.out_dir, self.quality = url, out_dir, quality
+        self._cancel = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def _fmt(self) -> str:
+        if self.quality in ("1080", "720", "480"):
+            h = self.quality
+            return f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={h}]+bestaudio/best[height<={h}]/best"
+        return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+
+    def run(self):
+        try:
+            import yt_dlp
+        except ImportError:
+            self.done.emit("", "yt-dlp 모듈이 없습니다 (pip install yt-dlp)")
+            return
+        result = {"path": ""}
+
+        def hook(d):
+            if self._cancel:
+                raise yt_dlp.utils.DownloadCancelled()
+            st = d.get("status")
+            if st == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                got = d.get("downloaded_bytes") or 0
+                frac = got / total if total else 0.0
+                spd = d.get("_speed_str") or d.get("speed") or ""
+                eta = d.get("_eta_str") or ""
+                self.progress.emit(min(frac, 0.99), f"받는 중 {spd} {eta}".strip())
+            elif st == "finished":
+                self.progress.emit(0.99, "합치는 중…")
+
+        def pp_hook(d):
+            if d.get("status") == "finished" and d.get("postprocessor") in ("MoveFiles", "Merger"):
+                info = d.get("info_dict") or {}
+                p = info.get("filepath") or info.get("_filename")
+                if p:
+                    result["path"] = p
+
+        ffdir = os.path.dirname(ffmpeg_tools.find_tool("ffmpeg") or "")
+        opts = {
+            "format": self._fmt(),
+            "outtmpl": os.path.join(self.out_dir, "%(title).80s [%(id)s].%(ext)s"),
+            "merge_output_format": "mp4",
+            "noplaylist": True,
+            "quiet": True,
+            "noprogress": True,
+            "no_warnings": True,
+            "progress_hooks": [hook],
+            "postprocessor_hooks": [pp_hook],
+            "windowsfilenames": True,
+            "retries": 3,
+        }
+        if ffdir:
+            opts["ffmpeg_location"] = ffdir
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(self.url, download=True)
+            path = result["path"]
+            if not path:
+                req = (info or {}).get("requested_downloads") or []
+                if req:
+                    path = req[0].get("filepath") or ""
+            if not path and info:
+                path = ydl.prepare_filename(info)
+                base = os.path.splitext(path)[0]
+                if not os.path.exists(path) and os.path.exists(base + ".mp4"):
+                    path = base + ".mp4"
+            if path and os.path.exists(path):
+                self.progress.emit(1.0, "완료")
+                self.done.emit(path, "")
+            else:
+                self.done.emit("", "다운로드는 끝났지만 파일을 찾지 못했습니다")
+        except Exception as ex:  # DownloadCancelled 포함
+            if self._cancel:
+                self.done.emit("", "취소됨")
+            else:
+                LOG.exception("다운로드 실패: %s", self.url)
+                msg = str(ex)
+                if "ERROR:" in msg:
+                    msg = msg.split("ERROR:", 1)[1].strip()
+                self.done.emit("", msg[:400])
 
 
 class GpuDetectWorker(QThread):
@@ -89,6 +216,7 @@ class ExportJob:
     dst: str
     mode: str = "fast"               # fast | smart | precise
     audio: str = ""                  # '' (영상+오디오) | 'aac' | 'mp3'
+    vertical: float | None = None    # 세로 9:16 크롭 위치 (None 이면 원본 비율)
     gpu: str | None = None
     note: str = field(default="")
 
@@ -123,6 +251,9 @@ class ExportWorker(QThread):
         if job.audio:
             cutter.cut_audio(job.src, part.start, part.end, dst, job.audio, job.info.get("acodec", ""), cb)
             return "오디오"
+        if job.vertical is not None:
+            cutter.cut_vertical(job.src, part.start, part.end, dst, job.info, job.vertical, cb, job.gpu)
+            return "세로 9:16"
         if job.mode == "precise":
             cutter.cut_encode(job.src, part.start, part.end, dst, cb, "h264", job.gpu)
             return "재인코딩"
@@ -136,7 +267,7 @@ class ExportWorker(QThread):
     def _merge(self, i: int, cutter: Cutter, job: ExportJob) -> str:
         total = job.total_duration
         cb = lambda p: self.jobProgress.emit(i, p)  # noqa: E731
-        if job.mode == "fast" and not job.audio:
+        if job.mode == "fast" and not job.audio and job.vertical is None:
             # 원본에서 구간들을 바로 읽어 한 번에 이어 붙인다 (임시 파일 없음)
             cutter.concat([(job.src, p.start, p.end) for p in job.parts], job.dst, cb, total)
             return f"{len(job.parts)}개 구간 합침"
@@ -149,7 +280,7 @@ class ExportWorker(QThread):
             for n, part in enumerate(job.parts):
                 plen = part.end - part.start
                 prog = lambda p, d=done, l=plen: self.jobProgress.emit(i, 0.9 * (d + p * l) / total)  # noqa: E731
-                if job.mode == "smart" and not job.audio:
+                if job.mode == "smart" and not job.audio and job.vertical is None:
                     plan = Cutter.smart_plan(job.info, job.keyframes, part.start, part.end)
                     if plan is not None and plan[2] is None:
                         entries.append((job.src, part.start, part.end))          # 키프레임에서 시작 → 그대로
