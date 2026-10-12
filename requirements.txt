@@ -1,4 +1,9 @@
-PySide6>=6.6
-mpv>=1.0.6
-py7zr>=0.20      # tools/get_libmpv.py 용
-pyinstaller>=6.0 # build.ps1 용
+# 실행
+PySide6==6.12.0
+mpv==1.0.8          # python-mpv. libmpv 2026-10 빌드(tools/get_libmpv.py)와 같이 검증됨
+# 도구 (tools/, build.ps1)
+py7zr==1.1.4
+pyinstaller==6.20.0
+pillow==11.3.0
+# 테스트
+pytest==9.1.1

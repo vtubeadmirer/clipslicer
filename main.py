@@ -1,13 +1,16 @@
 """ClipSlicer 실행 진입점."""
 import os
 import sys
+import traceback
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QColor, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from app import __version__
 from app.paths import missing_tools, base_dir
 from app.style import QSS
+from app.logging_setup import setup as setup_logging, install_error_dialog, LOG
 
 
 def apply_dark_theme(app: QApplication):
@@ -45,9 +48,11 @@ def main():
     app.setApplicationName("ClipSlicer")
     app.setWindowIcon(app_icon())
     apply_dark_theme(app)
+    setup_logging(__version__)
 
     missing = missing_tools()
     if missing:
+        LOG.error("필수 파일 없음: %s", missing)
         QMessageBox.critical(
             None, "필요한 파일이 없습니다",
             "다음 파일을 프로그램 폴더(또는 bin\\ 폴더)에 넣어 주세요:\n\n  • "
@@ -60,7 +65,16 @@ def main():
 
     from app.mainwindow import MainWindow  # libmpv 준비 후 import
 
-    win = MainWindow()
+    try:
+        win = MainWindow()
+    except Exception:
+        LOG.exception("메인 창 생성 실패")
+        QMessageBox.critical(None, "실행 실패",
+                             "창을 만들지 못했습니다. 그래픽 드라이버 문제일 수 있습니다.\n"
+                             "settings.ini 에 compat_mode=1 을 추가해 호환 모드로 다시 실행해 보세요.\n\n"
+                             + traceback.format_exc().strip().splitlines()[-1])
+        return 1
+    install_error_dialog(win)
     win.show()
     files = [a for a in sys.argv[1:] if os.path.exists(a)]
     if files:

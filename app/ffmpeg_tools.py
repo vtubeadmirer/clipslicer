@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import array
 import json
+import logging
 import os
 import re
 import shutil
@@ -16,6 +17,7 @@ from typing import Callable
 from .paths import find_tool
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+LOG = logging.getLogger("clipslicer")
 ProgressCb = Callable[[float], None]
 
 
@@ -196,6 +198,22 @@ AUDIO_ENCODERS = {
 }
 
 
+MP4_LIKE = {".mp4", ".m4v", ".mov", ".m4a"}
+
+
+def stream_map_args(dst: str, keep_subs: bool = True) -> list[str]:
+    """복사/인코딩 때 가져갈 스트림: 첫 비디오 + 모든 오디오. 데이터 스트림은 버린다.
+
+    자막은 mkv 같은 컨테이너에서만 유지한다 (mp4 는 srt/ass 를 못 담아 ffmpeg 가 실패함).
+    """
+    args = ["-map", "0:v:0", "-map", "0:a?", "-dn"]
+    if keep_subs and os.path.splitext(dst)[1].lower() not in MP4_LIKE:
+        args += ["-map", "0:s?", "-c:s", "copy"]
+    else:
+        args += ["-sn"]
+    return args
+
+
 # --------------------------------------------------------------------------- 실행기
 class CutProcess:
     """진행률 콜백을 주는 ffmpeg 실행기. cancel() 로 중단."""
@@ -266,6 +284,7 @@ class Cutter:
         if self._cancelled:
             raise Cancelled()
         if not ok:
+            LOG.error("ffmpeg 실패: %s\n  cmd: %s", msg, " ".join(cmd))
             raise RuntimeError(msg or "ffmpeg 실패")
         return msg
 
@@ -287,14 +306,14 @@ class Cutter:
     def cut_copy(self, src: str, start: float, end: float, dst: str, cb: ProgressCb, audio_only: str = ""):
         cmd = self._base(src, start, end - start)
         if audio_only:
-            cmd += self._audio_args(audio_only, "")  # 코덱 모르면 재인코딩
+            cmd += self._audio_args(audio_only, "") + ["-sn", "-dn"]
         else:
-            cmd += ["-c", "copy"]
+            cmd += stream_map_args(dst) + ["-c:v", "copy", "-c:a", "copy"]
         cmd += ["-avoid_negative_ts", "make_zero", "-progress", "pipe:1", dst]
         self._step(cmd, end - start, cb)
 
     def cut_audio(self, src: str, start: float, end: float, dst: str, fmt: str, acodec: str, cb: ProgressCb):
-        cmd = self._base(src, start, end - start) + self._audio_args(fmt, acodec)
+        cmd = self._base(src, start, end - start) + self._audio_args(fmt, acodec) + ["-sn", "-dn"]
         cmd += ["-progress", "pipe:1", dst]
         self._step(cmd, end - start, cb)
 
@@ -305,7 +324,8 @@ class Cutter:
 
         (-ss 입력 탐색은 비디오 키프레임 기준이라, 오디오를 copy 하면 앞쪽에 여분이 붙는다)
         """
-        cmd = self._base(src, start, end - start) + video_encoder_args(family, gpu)
+        cmd = self._base(src, start, end - start) + stream_map_args(dst, keep_subs=False)
+        cmd += video_encoder_args(family, gpu)
         cmd += extra_video or ["-pix_fmt", "yuv420p"]
         cmd += audio_args if audio_args is not None else AUDIO_ENCODERS["aac"]
         cmd += ["-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "-progress", "pipe:1", dst]
@@ -399,7 +419,7 @@ class Cutter:
                         pass
             lst.close()
             cmd = [find_tool("ffmpeg"), "-hide_banner", "-v", "error", "-y", "-nostats",
-                   "-f", "concat", "-safe", "0", "-i", lst.name, "-c", "copy",
+                   "-f", "concat", "-safe", "0", "-i", lst.name] + stream_map_args(dst) + ["-c:v", "copy", "-c:a", "copy",
                    "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-progress", "pipe:1", dst]
             self._step(cmd, max(total or est, 0.1), cb)
         finally:

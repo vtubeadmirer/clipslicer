@@ -1,17 +1,13 @@
-# PyInstaller 로 dist\ClipSlicer\ 폴더 빌드.
+﻿# PyInstaller 로 dist\ClipSlicer\ 폴더 빌드.
 # 실행 전: pip install -r requirements.txt, bin\ 에 libmpv-2.dll 준비 (ffmpeg/ffprobe 는 PATH 에 있으면 자동 복사).
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-foreach ($f in @("bin\libmpv-2.dll", "bin\ffmpeg.exe", "bin\ffprobe.exe")) {
-  if (-not (Test-Path $f)) {
-    if ($f -like "*ffmpeg*" -or $f -like "*ffprobe*") {
-      $name = Split-Path $f -Leaf
-      $src = (Get-Command $name -ErrorAction SilentlyContinue).Source
-      if ($src) { Copy-Item $src $f; Write-Host "PATH 에서 복사: $src"; continue }
-    }
-    throw "$f 가 없습니다. README 의 '개발 환경 설정' 을 참고하세요."
-  }
+if (-not (Test-Path "bin\libmpv-2.dll")) { throw "bin\libmpv-2.dll 이 없습니다: python tools\get_libmpv.py" }
+if (-not (Test-Path "bin\ffmpeg\ffmpeg.exe")) {
+  Write-Host "bin\ffmpeg\ 가 없어 공유 빌드를 받습니다 (python tools\get_ffmpeg.py)"
+  python tools\get_ffmpeg.py
+  if ($LASTEXITCODE -ne 0) { throw "ffmpeg 다운로드 실패" }
 }
 
 # pyinstaller 는 진행 로그를 stderr 로 찍으므로 PowerShell 이 오류로 오해하지 않게 한다
@@ -19,9 +15,9 @@ $ErrorActionPreference = "Continue"
 & pyinstaller --noconfirm --clean --windowed --name ClipSlicer `
   --icon assets\icon.ico `
   --add-data "assets;assets" `
+  --manifest assets\ClipSlicer.manifest `
   --add-binary "bin\libmpv-2.dll;." `
-  --add-binary "bin\ffmpeg.exe;." `
-  --add-binary "bin\ffprobe.exe;." `
+  --add-data "bin\ffmpeg;ffmpeg" `
   --exclude-module PIL --exclude-module numpy --exclude-module tkinter `
   --exclude-module yaml --exclude-module psutil `
   --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtPdf `
@@ -43,6 +39,22 @@ $dirs = @("PySide6/qml", "PySide6/translations", "PySide6/plugins/virtualkeyboar
 foreach ($d in $dirs) {
   $full = Join-Path $internal $d
   if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force }
+}
+# PyInstaller 가 ffmpeg 의 DLL 을 의존성으로 보고 _internal 루트에 한 번 더 복사한다 → 중복 제거 (ffmpeg\ 안의 것만 쓴다)
+foreach ($pat in @("avcodec-*.dll", "avformat-*.dll", "avfilter-*.dll", "avdevice-*.dll", "avutil-*.dll",
+                   "swscale-*.dll", "swresample-*.dll", "postproc-*.dll")) {
+  Get-ChildItem $internal -Filter $pat -ErrorAction SilentlyContinue | Remove-Item -Force
+}
+
+# 검증: PATH 를 비운 상태에서 번들된 ffmpeg/ffprobe 가 자기 DLL 만으로 뜨는지
+$env:PATH = "$env:SystemRoot\System32"
+foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
+  $p = Join-Path $internal "ffmpeg\$exe"
+  $out = & $p -version 2>&1
+  $code = $LASTEXITCODE
+  $first = ($out | Select-Object -First 1)
+  if ($code -ne 0) { throw "번들 $exe 실행 실패 (DLL 누락?): $first" }
+  Write-Host "검증 OK: $first"
 }
 $size = (Get-ChildItem dist\ClipSlicer -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("완료: dist\ClipSlicer\ClipSlicer.exe  ({0:N0} MB)" -f $size)

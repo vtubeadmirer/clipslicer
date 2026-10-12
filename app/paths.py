@@ -13,10 +13,10 @@ def base_dir() -> str:
 
 def _candidate_dirs():
     b = base_dir()
-    dirs = [b, os.path.join(b, "bin")]
+    dirs = [os.path.join(b, "bin", "ffmpeg"), b, os.path.join(b, "bin")]
     meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller 가 번들 파일을 푸는 곳 (onedir 은 _internal)
     if meipass and meipass not in dirs:
-        dirs.append(meipass)
+        dirs += [os.path.join(meipass, "ffmpeg"), meipass]
     return dirs
 
 

@@ -52,11 +52,11 @@ ffmpeg + libmpv + PySide6 로 만들었습니다.
 ```
 pip install -r requirements.txt
 python tools\get_libmpv.py        # bin\libmpv-2.dll 다운로드 (7-Zip 또는 Bandizip 필요)
+python tools\get_ffmpeg.py        # bin\ffmpeg\ 공유 빌드 다운로드 (버전 고정)
 python tools\make_icon.py         # assets\icon.ico 생성 (선택)
 ```
 
-`ffmpeg.exe`, `ffprobe.exe` 는 PATH 에 있거나 `bin\` 폴더에 두면 됩니다.
-([gyan.dev 빌드](https://www.gyan.dev/ffmpeg/builds/) 권장)
+ffmpeg 는 `tools\get_ffmpeg.py` 가 받는 공유 빌드(`bin\ffmpeg\`)를 우선 쓰고, 없으면 PATH 의 ffmpeg 를 씁니다.
 
 실행: `python main.py` 또는 `run.bat`
 
@@ -77,8 +77,14 @@ git push origin v0.2.0
 .\build.ps1
 ```
 
-`dist\ClipSlicer\ClipSlicer.exe` 가 만들어집니다. ffmpeg, ffprobe, libmpv 가 같이 들어갑니다.
+`dist\ClipSlicer\ClipSlicer.exe` 가 만들어집니다. ffmpeg(공유 빌드), libmpv 가 같이 들어가고, 빌드 끝에 번들된 ffmpeg 가 PATH 없이 뜨는지 검증합니다.
 설치 없이 폴더째 복사해서 쓰는 **포터블** 구조이며, 설정은 폴더 안 `settings.ini` 에 저장됩니다.
+
+## 문제가 생기면
+
+- 오류는 `logs\clipslicer.log` 에 남고(프로그램 폴더, 쓸 수 없으면 `%LOCALAPPDATA%\ClipSlicer\logs`), 처리되지 않은 오류는 대화상자로 알려 줍니다. 도움말 ▸ 로그 폴더 열기.
+- 화면이 검게만 나오면(원격 데스크톱·가상머신·구형 GPU) 설정 ▸ **호환 모드**를 켜고 다시 실행하세요.
+- 지원 환경: Windows 10 1809 이상 64비트.
 
 ## 구조
 
@@ -93,7 +99,10 @@ app/workers.py       백그라운드 스레드 (분석 · 무음 · GPU · 내�
 app/dialogs.py       무음 마커 · 파일명 규칙 · 덮어쓰기 대화상자
 app/help.py          앱 내 도움말
 app/style.py         다크 테마 QSS
+app/logging_setup.py 로그 파일 · 예외 대화상자
 tools/get_libmpv.py  libmpv-2.dll 다운로드
+tools/get_ffmpeg.py  ffmpeg 공유 빌드 다운로드 (버전 고정)
+tests/               모델 테스트 · ffmpeg 통합 테스트
 tools/make_icon.py   아이콘 생성
 docs/index.html      사용 설명서
 ```

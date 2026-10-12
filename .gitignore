@@ -7,7 +7,7 @@ venv/
 # 빌드 산출물
 build/
 dist/
-*.spec.bak
+*.spec
 
 # 외부 바이너리 (용량 큼 — 저장소에 올리지 않음)
 bin/
@@ -20,3 +20,4 @@ bin/
 Thumbs.db
 desktop.ini
 settings.ini
+logs/

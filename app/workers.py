@@ -6,10 +6,14 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 
+import logging
+
 from PySide6.QtCore import QThread, Signal
 
 from . import ffmpeg_tools
 from .ffmpeg_tools import Cutter, Cancelled
+
+LOG = logging.getLogger("clipslicer")
 
 
 class AnalyzeWorker(QThread):
@@ -27,16 +31,19 @@ class AnalyzeWorker(QThread):
         try:
             thumbs = ffmpeg_tools.extract_thumbnails(self.path, self.duration)
         except Exception:
+            LOG.exception("썸네일 실패: %s", self.path)
             thumbs = []
         self.thumbsReady.emit(self.path, thumbs)
         try:
             wave = ffmpeg_tools.compute_waveform(self.path)
         except Exception:
+            LOG.exception("파형 실패: %s", self.path)
             wave = None
         self.waveformReady.emit(self.path, wave)
         try:
             self.keyframesReady.emit(self.path, ffmpeg_tools.keyframes(self.path))
         except Exception:
+            LOG.exception("키프레임 실패: %s", self.path)
             self.keyframesReady.emit(self.path, [])
 
 
@@ -51,6 +58,7 @@ class SilenceWorker(QThread):
         try:
             spans = ffmpeg_tools.detect_silence(self.path, self.noise_db, self.min_dur)
         except Exception:
+            LOG.exception("무음 감지 실패: %s", self.path)
             spans = []
         self.done.emit(self.path, spans)
 
@@ -184,6 +192,8 @@ class ExportWorker(QThread):
             if self._cancel:
                 break
             self.jobStarted.emit(i, job.label)
+            LOG.info("내보내기 [%d/%d] %s mode=%s audio=%s parts=%d gpu=%s", i + 1, len(self.jobs), job.dst,
+                     job.mode, job.audio or "-", len(job.parts), job.gpu)
             os.makedirs(os.path.dirname(job.dst) or ".", exist_ok=True)
             try:
                 note = self._run_job(i, job)
@@ -191,6 +201,7 @@ class ExportWorker(QThread):
             except Cancelled:
                 ok, msg = False, "취소됨"
             except Exception as ex:
+                LOG.exception("내보내기 실패: %s", job.dst)
                 ok, msg = False, str(ex)
             if ok:
                 ok_n += 1

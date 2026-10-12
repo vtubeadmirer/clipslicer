@@ -21,10 +21,25 @@ jobs:
       - name: 의존성 설치
         run: |
           python -m pip install --upgrade pip
-          pip install PySide6 mpv pytest
+          pip install PySide6==6.12.0 mpv==1.0.8 pytest==9.1.1
 
       - name: 문법 검사
         run: python -m compileall -q main.py app tools tests
 
-      - name: 모델 테스트 (ffmpeg / mpv 불필요)
-        run: pytest -q tests
+      - name: 모델 테스트 (ffmpeg 불필요)
+        run: pytest -q tests/test_segments.py
+
+      - name: ffmpeg 캐시
+        id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: bin/ffmpeg
+          key: ffmpeg-${{ hashFiles('tools/get_ffmpeg.py') }}
+
+      - name: ffmpeg 다운로드 (캐시 없을 때)
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: python tools/get_ffmpeg.py
+
+      - name: 통합 테스트 (실제 자르기; ffmpeg 없으면 건너뜀)
+        run: pytest -q tests/test_ffmpeg_integration.py -rs

@@ -204,6 +204,7 @@ m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192k 로 변환합니�
  <tr><td>GPU 인코딩 사용</td><td>하드웨어 인코더가 발견되면 재인코딩에 사용합니다. 메뉴에 발견된 인코더 이름이 표시됩니다.</td></tr>
  <tr><td>작업 자동 저장</td><td>마커·구간 변경을 영상 옆 <code>.clipslicer.json</code> 에 저장합니다. 끄면 창을 닫을 때 작업이 사라집니다.</td></tr>
  <tr><td>키프레임 표시</td><td>타임라인의 흰 점을 끄거나 켭니다.</td></tr>
+ <tr><td>호환 모드</td><td>GPU 가속 없이 재생 화면을 그립니다. 화면이 검게만 나올 때. 다시 실행해야 적용됩니다.</td></tr>
  <tr><td>파일명 규칙…</td><td>출력 파일 이름 패턴.</td></tr>
 </table>
 
@@ -252,6 +253,12 @@ MKV 의 자막·첨부 스트림을 MP4 로 복사하려 함 (이때는 "정확�
 <h3>필요한 파일이 없다는 창이 뜬다</h3>
 <p><code>ffmpeg.exe</code>, <code>ffprobe.exe</code>, <code>libmpv-2.dll</code> 이 프로그램 폴더(또는 그 안의 <code>bin</code>)에 있어야 합니다.
 개발 환경에서는 <code>python tools\\get_libmpv.py</code> 로 libmpv 를 받을 수 있습니다.</p>
+
+<h3>오류가 났을 때</h3>
+<p>처리되지 않은 오류는 대화상자로 알려 주고, 모든 오류는 <code>logs\clipslicer.log</code> 에 남습니다 (<b>도움말 ▸ 로그 폴더 열기</b>).
+문제를 보고할 때 이 파일을 같이 보내 주시면 원인을 찾기 쉽습니다. 로그에는 열었던 파일 경로가 들어 있습니다.</p>
+<h3>화면이 검게만 나온다 (원격 데스크톱 · 가상머신 · 구형 GPU)</h3>
+<p><b>설정 ▸ 호환 모드</b>를 켜고 프로그램을 다시 실행하세요. GPU 가속 없이 그립니다.</p>
 
 <h2>정보</h2>
 <p>ClipSlicer """ + __version__ + """ — Python · PySide6 · libmpv · ffmpeg.<br>

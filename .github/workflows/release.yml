@@ -27,15 +27,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: ffmpeg 다운로드 (gyan.dev essentials)
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force bin | Out-Null
-          Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile ffmpeg.zip
-          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_tmp
-          Copy-Item (Get-ChildItem ffmpeg_tmp -Recurse -Filter ffmpeg.exe)[0].FullName bin\
-          Copy-Item (Get-ChildItem ffmpeg_tmp -Recurse -Filter ffprobe.exe)[0].FullName bin\
-          & bin\ffmpeg.exe -version | Select-Object -First 1
+      - name: ffmpeg 공유 빌드 다운로드 (버전 고정)
+        run: python tools/get_ffmpeg.py
 
       - name: libmpv 다운로드 (러너에 7z 있음)
         run: python tools/get_libmpv.py

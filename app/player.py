@@ -22,8 +22,10 @@ class MpvWidget(QWidget):
     fileLoaded = Signal()
     clicked = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, compat: bool = False):
+        """compat=True 면 GPU 가속 없이 그리는 호환 모드 (원격 데스크톱·가상머신·구형 GPU 용)."""
         super().__init__(parent)
+        self.compat = compat
         self.setAttribute(Qt.WA_DontCreateNativeAncestors)
         self.setAttribute(Qt.WA_NativeWindow)
         self.setAutoFillBackground(True)
@@ -35,8 +37,8 @@ class MpvWidget(QWidget):
 
         self.mpv = mpv.MPV(
             wid=str(int(self.winId())),
-            vo="gpu",
-            hwdec="auto-safe",
+            vo="direct3d" if compat else "gpu,direct3d",
+            hwdec="no" if compat else "auto-safe",
             keep_open="yes",
             osc="no",
             input_default_bindings="no",

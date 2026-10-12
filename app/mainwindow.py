@@ -14,7 +14,10 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__, ffmpeg_tools
+import logging
+
 from .paths import make_settings
+from .logging_setup import log_dir
 from .dialogs import SilenceDialog, PatternDialog, ask_overwrite
 from .help import HelpDialog
 from .player import MpvWidget
@@ -26,6 +29,7 @@ VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".ts", ".m4v", ".wmv", ".
 COL_USE, COL_NO, COL_START, COL_END, COL_DUR, COL_NAME = range(6)
 SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
 MAX_RECENT = 10
+LOG = logging.getLogger("clipslicer")
 
 
 class TimeEdit(QLineEdit):
@@ -179,7 +183,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.drop_label = DropLabel()
         self.drop_label.clicked.connect(self.open_files)
-        self.player = MpvWidget()
+        self.player = MpvWidget(compat=self.settings.value("compat_mode", "0") == "1")
         self.player.positionChanged.connect(self._on_position)
         self.player.durationChanged.connect(self._on_duration)
         self.player.pauseChanged.connect(self._on_pause_changed)
@@ -494,6 +498,10 @@ class MainWindow(QMainWindow):
         m_set.addAction(self.act_gpu)
         self.act_autosave = QAction("작업 자동 저장 (.clipslicer.json)", self, checkable=True, checked=True)
         m_set.addAction(self.act_autosave)
+        self.act_compat = QAction("호환 모드 — 화면이 검게 나올 때 (재시작 필요)", self, checkable=True)
+        self.act_compat.setChecked(self.settings.value("compat_mode", "0") == "1")
+        self.act_compat.toggled.connect(self._on_compat_toggled)
+        m_set.addAction(self.act_compat)
         m_set.addSeparator()
         a = QAction("파일명 규칙…", self)
         a.triggered.connect(self.edit_pattern)
@@ -513,6 +521,9 @@ class MainWindow(QMainWindow):
         m_help.addSeparator()
         a = QAction("GitHub 저장소 열기", self)
         a.triggered.connect(lambda: os.startfile("https://github.com/vtubeadmirer/clipslicer"))
+        m_help.addAction(a)
+        a = QAction("로그 폴더 열기", self)
+        a.triggered.connect(lambda: os.startfile(log_dir()))
         m_help.addAction(a)
         self._rebuild_recent_menu()
 
@@ -615,6 +626,13 @@ class MainWindow(QMainWindow):
         a.triggered.connect(lambda: (self.settings.setValue("recent", []), self._rebuild_recent_menu()))
         self.menu_recent.addAction(a)
 
+    def _on_compat_toggled(self, on: bool):
+        self.settings.setValue("compat_mode", "1" if on else "0")
+        self.settings.sync()
+        QMessageBox.information(self, "호환 모드", "다음 실행부터 적용됩니다.\n"
+                                + ("GPU 가속 없이 화면을 그립니다. 원격 데스크톱·가상머신·구형 그래픽에서 화면이 검게 나올 때 쓰세요."
+                                   if on else "GPU 가속 재생으로 돌아갑니다."))
+
     def edit_pattern(self):
         d = PatternDialog(self, self.pattern)
         if d.exec():
@@ -628,6 +646,7 @@ class MainWindow(QMainWindow):
 
     def _on_gpu_detected(self, enc):
         self.gpu_encoder = enc
+        LOG.info("GPU 인코더: %s", enc)
         if enc:
             self.lbl_gpu.setText(f"GPU: {enc}")
             self.act_gpu.setText(f"GPU 인코딩 사용 ({enc})")
@@ -705,8 +724,11 @@ class MainWindow(QMainWindow):
         try:
             info = ffmpeg_tools.probe(path)
         except Exception as ex:
+            LOG.warning("열기 실패 %s: %s", path, ex)
             self._log(f"열기 실패: {os.path.basename(path)} — {ex}")
             return None
+        LOG.info("열기 %s | %sx%s %.2ffps %.1fs %s/%s", path, info["width"], info["height"], info["fps"],
+                 info["duration"], info["vcodec"], info["acodec"])
         if info["duration"] <= 0:
             self._log(f"길이를 알 수 없음: {os.path.basename(path)}")
             return None
