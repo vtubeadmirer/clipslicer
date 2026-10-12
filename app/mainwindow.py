@@ -334,19 +334,18 @@ class MainWindow(QMainWindow):
         gv.addLayout(outrow)
 
         moderow = QHBoxLayout()
-        moderow.addWidget(QLabel("모드"))
-        self.rb_fast = QRadioButton("빠르게")
-        self.rb_fast.setToolTip("무손실 복사. 즉시 끝나지만 시작점이 앞 키프레임까지 당겨질 수 있음")
-        self.rb_smart = QRadioButton("스마트")
-        self.rb_smart.setToolTip("시작 1~2초만 재인코딩하고 나머지는 복사. 빠르고 정확 (추천)")
-        self.rb_precise = QRadioButton("정확하게")
-        self.rb_precise.setToolTip("전체 재인코딩 (H.264 CRF 18). 느리지만 가장 호환성 좋음")
-        self.rb_smart.setChecked(True)
-        for rb in (self.rb_fast, self.rb_smart, self.rb_precise):
-            rb.setFocusPolicy(Qt.NoFocus)
-            rb.toggled.connect(lambda _c: self._refresh_table())
-            moderow.addWidget(rb)
-        moderow.addStretch(1)
+        moderow.addWidget(QLabel("방식"))
+        self.cb_mode = QComboBox()
+        self.cb_mode.addItem("빠르게 — 원본 그대로 잘라내기 (즉시, 기본)", "fast")
+        self.cb_mode.addItem("스마트 — 시작점 정확 (앞 1~2초만 재인코딩)", "smart")
+        self.cb_mode.addItem("정확하게 — 전체 재인코딩 (느림)", "precise")
+        self.cb_mode.setToolTip(
+            "빠르게: 재인코딩 없이 복사. 시작점이 바로 앞 키프레임까지(보통 1~2초) 당겨질 수 있음.\n"
+            "스마트: 시작~첫 키프레임만 재인코딩해서 시작점을 정확히 맞춤. 파일을 한 번 더 읽음.\n"
+            "정확하게: 전부 재인코딩. 어떤 영상이든 되지만 가장 느림.")
+        self.cb_mode.setFocusPolicy(Qt.NoFocus)
+        self.cb_mode.currentIndexChanged.connect(lambda _i: self._refresh_table())
+        moderow.addWidget(self.cb_mode, 1)
         gv.addLayout(moderow)
 
         optrow = QHBoxLayout()
@@ -551,8 +550,9 @@ class MainWindow(QMainWindow):
     def _restore_settings(self):
         s = self.settings
         self.ed_outdir.setText(s.value("out_dir", ""))
-        mode = s.value("mode", "smart")
-        {"fast": self.rb_fast, "precise": self.rb_precise}.get(mode, self.rb_smart).setChecked(True)
+        mode = s.value("mode", "fast")
+        idx = self.cb_mode.findData(mode)
+        self.cb_mode.setCurrentIndex(idx if idx >= 0 else 0)
         self.cb_open.setChecked(s.value("open_after", "1") == "1")
         self.act_snap.setChecked(s.value("snap_keyframes", "0") == "1")
         self.act_gpu.setChecked(s.value("use_gpu", "1") == "1")
@@ -573,7 +573,7 @@ class MainWindow(QMainWindow):
     def _save_settings(self):
         s = self.settings
         s.setValue("out_dir", self.ed_outdir.text())
-        s.setValue("mode", "fast" if self.rb_fast.isChecked() else "precise" if self.rb_precise.isChecked() else "smart")
+        s.setValue("mode", self._mode())
         s.setValue("open_after", "1" if self.cb_open.isChecked() else "0")
         s.setValue("snap_keyframes", "1" if self.act_snap.isChecked() else "0")
         s.setValue("use_gpu", "1" if self.act_gpu.isChecked() else "0")
@@ -1132,13 +1132,16 @@ class MainWindow(QMainWindow):
             self.toggle_preview_around()
 
     # ---- 테이블 ----
+    def _mode(self) -> str:
+        return self.cb_mode.currentData() or "fast"
+
     def _output_ext(self) -> str:
         audio = self.cb_audio.currentData()
         if audio == "aac":
             return ".m4a"
         if audio == "mp3":
             return ".mp3"
-        if self.rb_precise.isChecked():
+        if self._mode() == "precise":
             return ".mp4"
         return self.current.ext if self.current else ".mp4"
 
@@ -1237,7 +1240,7 @@ class MainWindow(QMainWindow):
         return custom if custom else os.path.join(os.path.dirname(proj.path), f"{proj.stem}_cuts")
 
     def _build_jobs(self, projects: list[ClipProject]) -> list[ExportJob]:
-        mode = "fast" if self.rb_fast.isChecked() else "precise" if self.rb_precise.isChecked() else "smart"
+        mode = self._mode()
         audio = self.cb_audio.currentData()
         merge = self.cb_merge.isChecked()
         gpu = self.gpu_encoder if self.act_gpu.isChecked() else None

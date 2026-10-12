@@ -13,7 +13,7 @@ from .ffmpeg_tools import Cutter, Cancelled
 
 
 class AnalyzeWorker(QThread):
-    """썸네일 · 파형 · 키프레임을 뽑아서 신호로 돌려준다."""
+    """썸네일 · 파형 · 키프레임을 뽑아서 신호로 돌려준다. (썸네일 → 파형 → 키프레임 순)"""
     thumbsReady = Signal(str, list)        # path, [(t, jpeg bytes)]
     waveformReady = Signal(str, object)    # path, list[float] | None
     keyframesReady = Signal(str, list)     # path, [t, ...]
@@ -25,10 +25,6 @@ class AnalyzeWorker(QThread):
 
     def run(self):
         try:
-            self.keyframesReady.emit(self.path, ffmpeg_tools.keyframes(self.path))
-        except Exception:
-            self.keyframesReady.emit(self.path, [])
-        try:
             thumbs = ffmpeg_tools.extract_thumbnails(self.path, self.duration)
         except Exception:
             thumbs = []
@@ -38,6 +34,10 @@ class AnalyzeWorker(QThread):
         except Exception:
             wave = None
         self.waveformReady.emit(self.path, wave)
+        try:
+            self.keyframesReady.emit(self.path, ffmpeg_tools.keyframes(self.path))
+        except Exception:
+            self.keyframesReady.emit(self.path, [])
 
 
 class SilenceWorker(QThread):
@@ -114,40 +114,67 @@ class ExportWorker(QThread):
     def _cut_one(self, cutter: Cutter, job: ExportJob, part: ExportPart, dst: str, cb) -> str:
         if job.audio:
             cutter.cut_audio(job.src, part.start, part.end, dst, job.audio, job.info.get("acodec", ""), cb)
-            return "audio"
+            return "오디오"
         if job.mode == "precise":
             cutter.cut_encode(job.src, part.start, part.end, dst, cb, "h264", job.gpu)
-            return "encode"
+            return "재인코딩"
         if job.mode == "smart":
-            return cutter.cut_smart(job.src, part.start, part.end, dst, job.info, job.keyframes, cb, job.gpu)
+            how = cutter.cut_smart(job.src, part.start, part.end, dst, job.info, job.keyframes, cb, job.gpu)
+            return {"copy": "복사", "smart": "스마트", "encode": "재인코딩"}.get(how, how)
         cutter.cut_copy(job.src, part.start, part.end, dst, cb)
-        return "copy"
+        return "복사"
+
+    # ---- 합치기 ----
+    def _merge(self, i: int, cutter: Cutter, job: ExportJob) -> str:
+        total = job.total_duration
+        cb = lambda p: self.jobProgress.emit(i, p)  # noqa: E731
+        if job.mode == "fast" and not job.audio:
+            # 원본에서 구간들을 바로 읽어 한 번에 이어 붙인다 (임시 파일 없음)
+            cutter.concat([(job.src, p.start, p.end) for p in job.parts], job.dst, cb, total)
+            return f"{len(job.parts)}개 구간 합침"
+        tmp = tempfile.mkdtemp(prefix="clipslicer_merge_")
+        try:
+            ext = os.path.splitext(job.dst)[1]
+            entries: list = []
+            done = 0.0
+            heads = 0
+            for n, part in enumerate(job.parts):
+                plen = part.end - part.start
+                prog = lambda p, d=done, l=plen: self.jobProgress.emit(i, 0.9 * (d + p * l) / total)  # noqa: E731
+                if job.mode == "smart" and not job.audio:
+                    plan = Cutter.smart_plan(job.info, job.keyframes, part.start, part.end)
+                    if plan is not None and plan[2] is None:
+                        entries.append((job.src, part.start, part.end))          # 키프레임에서 시작 → 그대로
+                    elif plan is not None:
+                        family, audio_args, k = plan
+                        head = os.path.join(tmp, f"head{n:03d}{ext}")
+                        cutter.encode_head(job.src, part.start, k, head, job.info, job.gpu, family, audio_args, prog)
+                        entries += [head, (job.src, k, part.end)]
+                        heads += 1
+                    else:
+                        f = os.path.join(tmp, f"part{n:03d}{ext}")
+                        cutter.cut_encode(job.src, part.start, part.end, f, prog, "h264", job.gpu)
+                        entries.append(f)
+                else:
+                    f = os.path.join(tmp, f"part{n:03d}{ext}")
+                    self._cut_one(cutter, job, part, f, prog)
+                    entries.append(f)
+                done += plen
+            cutter.concat(entries, job.dst, lambda p: self.jobProgress.emit(i, 0.9 + 0.1 * p), total)
+            return f"{len(job.parts)}개 구간 합침" + (f", 앞조각 {heads}개 재인코딩" if heads else "")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def _run_job(self, i: int, job: ExportJob) -> str:
         cutter = Cutter()
         self._cutter = cutter
         try:
+            if job.mode == "smart" and not job.keyframes and not job.audio:
+                # 키프레임 분석이 아직 안 끝났으면 지금 한다 (없으면 전체 재인코딩으로 빠져 느려짐)
+                job.keyframes = ffmpeg_tools.keyframes(job.src)
             if len(job.parts) == 1:
-                how = self._cut_one(cutter, job, job.parts[0], job.dst, lambda p: self.jobProgress.emit(i, p))
-                return {"copy": "복사", "smart": "스마트", "encode": "재인코딩", "audio": "오디오"}.get(how, how)
-            # 합치기: 각 조각을 임시 파일로 자른 뒤 이어 붙인다
-            tmp = tempfile.mkdtemp(prefix="clipslicer_merge_")
-            try:
-                ext = os.path.splitext(job.dst)[1]
-                total = job.total_duration
-                done = 0.0
-                files = []
-                for n, part in enumerate(job.parts):
-                    f = os.path.join(tmp, f"part{n:03d}{ext}")
-                    plen = part.end - part.start
-                    self._cut_one(cutter, job, part, f,
-                                  lambda p, d=done, l=plen: self.jobProgress.emit(i, 0.9 * (d + p * l) / total))
-                    done += plen
-                    files.append(f)
-                cutter.concat(files, job.dst, lambda p: self.jobProgress.emit(i, 0.9 + 0.1 * p))
-                return f"{len(files)}개 조각 합침"
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+                return self._cut_one(cutter, job, job.parts[0], job.dst, lambda p: self.jobProgress.emit(i, p))
+            return self._merge(i, cutter, job)
         finally:
             self._cutter = None
 

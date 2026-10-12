@@ -64,15 +64,16 @@ def probe(path: str) -> dict:
     return info
 
 
-def extract_thumbnails(path: str, duration: float, max_count: int = 300, height: int = 90) -> list[tuple[float, bytes]]:
+def extract_thumbnails(path: str, duration: float, max_count: int = 200, height: int = 90) -> list[tuple[float, bytes]]:
     """영상 전체를 균등 분할한 썸네일(JPEG bytes) 목록. 1초 간격 이하로는 안 쪼갠다."""
     if duration <= 0:
         return []
     interval = max(duration / max_count, 1.0)
     tmp = tempfile.mkdtemp(prefix="clipslicer_thumbs_")
     pattern = os.path.join(tmp, "t_%05d.jpg")
-    cmd = [find_tool("ffmpeg"), "-v", "error", "-y", "-i", path,
-           "-vf", f"fps=1/{interval},scale=-2:{height}", "-q:v", "6", pattern]
+    # -skip_frame nokey: 키프레임만 디코딩 → 전체 디코딩보다 10배 이상 빠르다 (썸네일엔 충분)
+    cmd = [find_tool("ffmpeg"), "-v", "error", "-y", "-skip_frame", "nokey", "-an", "-sn", "-i", path,
+           "-vf", f"fps=1/{interval},scale=-2:{height}", "-vsync", "vfr", "-q:v", "6", pattern]
     subprocess.run(cmd, capture_output=True, **_popen_kwargs())
     result = []
     for i, name in enumerate(sorted(os.listdir(tmp))):
@@ -335,46 +336,78 @@ class Cutter:
             self.cut_encode(src, start, end, dst, cb, family or "h264", gpu)
             return "encode"
         k = inside[0]
-        ext = os.path.splitext(dst)[1] or ".mp4"
         tmp = tempfile.mkdtemp(prefix="clipslicer_smart_")
-        head = os.path.join(tmp, "head" + ext)
-        tail = os.path.join(tmp, "tail" + ext)
+        head = os.path.join(tmp, "head" + (os.path.splitext(dst)[1] or ".mp4"))
         try:
-            head_len, tail_len = k - start, end - k
+            head_len = k - start
             total = end - start
-            extra = ["-pix_fmt", info.get("pix_fmt") or "yuv420p",
-                     "-s", f"{info['width']}x{info['height']}", "-r", f"{fps:.6f}"]
-            if family == "h264" and info.get("profile"):
-                prof = info["profile"].lower().replace(" ", "")
-                if prof in ("baseline", "main", "high"):
-                    extra += ["-profile:v", prof]
-            self.cut_encode(src, start, k, head, lambda p: cb(p * head_len / total),
-                            family, gpu, extra_video=extra, audio_args=audio_args)
-            self.cut_copy(src, k, end, tail, lambda p: cb((head_len + p * tail_len) / total))
-            self.concat([head, tail], dst, lambda p: cb(0.98 + 0.02 * p))
+            self.encode_head(src, start, k, head, info, gpu, family, audio_args,
+                             lambda p: cb(p * head_len / total))
+            # 나머지는 원본에서 바로 읽어 붙인다 (임시 복사 없음 → 파일을 한 번만 쓴다)
+            self.concat([head, (src, k, end)], dst, lambda p: cb((head_len + p * (end - k)) / total), total)
             return "smart"
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def concat(self, parts: list[str], dst: str, cb: ProgressCb):
-        """같은 코덱의 파일들을 재인코딩 없이 이어 붙인다 (concat demuxer)."""
+    def encode_head(self, src: str, start: float, k: float, dst: str, info: dict, gpu: str | None,
+                    family: str, audio_args: list[str], cb: ProgressCb):
+        """스마트 컷의 앞 조각(시작~키프레임) 재인코딩. 원본과 같은 해상도·fps·픽셀 포맷·프로파일로."""
+        fps = info.get("fps", 30.0) or 30.0
+        extra = ["-pix_fmt", info.get("pix_fmt") or "yuv420p",
+                 "-s", f"{info['width']}x{info['height']}", "-r", f"{fps:.6f}"]
+        if family == "h264" and info.get("profile"):
+            prof = info["profile"].lower().replace(" ", "")
+            if prof in ("baseline", "main", "high"):
+                extra += ["-profile:v", prof]
+        self.cut_encode(src, start, k, dst, cb, family, gpu, extra_video=extra, audio_args=audio_args)
+
+    @staticmethod
+    def smart_plan(info: dict, kfs: list[float], start: float, end: float):
+        """스마트 컷 계획: (family, audio_args, k) 또는 None(전체 재인코딩 필요). k 가 None 이면 그냥 복사."""
+        vcodec = info.get("vcodec", "")
+        fps = info.get("fps", 30.0) or 30.0
+        frame = 1.0 / fps
+        family = "h264" if vcodec == "h264" else "hevc" if vcodec in ("hevc", "h265") else None
+        inside = [k for k in kfs if start - frame / 2 <= k <= end]
+        if inside and inside[0] <= start + frame / 2:
+            return family, None, None
+        audio_args = AUDIO_ENCODERS.get(info.get("acodec", "")) if info.get("has_audio") else ["-an"]
+        if family is None or not inside or audio_args is None:
+            return None
+        return family, audio_args, inside[0]
+
+    def concat(self, parts: list, dst: str, cb: ProgressCb, total: float = 0.0):
+        """같은 코덱의 조각들을 재인코딩 없이 이어 붙인다 (concat demuxer).
+
+        parts 항목: 파일 경로 문자열, 또는 (경로, inpoint, outpoint) 튜플.
+        튜플이면 원본에서 그 구간만 읽어 붙이므로 임시 파일을 만들 필요가 없다.
+        (inpoint 가 키프레임이 아니면 앞 키프레임부터 들어간다 — '빠르게' 모드와 같은 동작)
+        """
         lst = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
         try:
+            est = 0.0
             for p in parts:
-                lst.write("file '" + p.replace("\\", "/").replace("'", "'\\''") + "'\n")
+                if isinstance(p, tuple):
+                    path, a, b = p
+                    lst.write(f"file '{_concat_escape(path)}'\ninpoint {a:.3f}\noutpoint {b:.3f}\n")
+                    est += b - a
+                else:
+                    lst.write(f"file '{_concat_escape(p)}'\n")
+                    try:
+                        est += probe(p)["duration"]
+                    except Exception:
+                        pass
             lst.close()
-            total = 0.0
-            for p in parts:
-                try:
-                    total += probe(p)["duration"]
-                except Exception:
-                    pass
             cmd = [find_tool("ffmpeg"), "-hide_banner", "-v", "error", "-y", "-nostats",
                    "-f", "concat", "-safe", "0", "-i", lst.name, "-c", "copy",
-                   "-movflags", "+faststart", "-progress", "pipe:1", dst]
-            self._step(cmd, max(total, 0.1), cb)
+                   "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-progress", "pipe:1", dst]
+            self._step(cmd, max(total or est, 0.1), cb)
         finally:
             try:
                 os.remove(lst.name)
             except OSError:
                 pass
+
+
+def _concat_escape(path: str) -> str:
+    return path.replace("\\", "/").replace("'", "'\\''")
