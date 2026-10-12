@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 빌드 산출물
+build/
+dist/
+*.spec.bak
+
+# 외부 바이너리 (용량 큼 — 저장소에 올리지 않음)
+bin/
+*.dll
+*.exe
+
+# 편집기 / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

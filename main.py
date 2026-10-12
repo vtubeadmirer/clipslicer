@@ -1,0 +1,61 @@
+"""ClipSlicer 실행 진입점."""
+import os
+import sys
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette, QColor
+from PySide6.QtWidgets import QApplication, QMessageBox
+
+from app.paths import missing_tools, base_dir
+
+
+def apply_dark_theme(app: QApplication):
+    app.setStyle("Fusion")
+    p = QPalette()
+    bg, base, text = QColor(37, 37, 42), QColor(28, 28, 32), QColor(228, 228, 232)
+    p.setColor(QPalette.Window, bg)
+    p.setColor(QPalette.WindowText, text)
+    p.setColor(QPalette.Base, base)
+    p.setColor(QPalette.AlternateBase, bg)
+    p.setColor(QPalette.ToolTipBase, base)
+    p.setColor(QPalette.ToolTipText, text)
+    p.setColor(QPalette.Text, text)
+    p.setColor(QPalette.Button, QColor(50, 50, 56))
+    p.setColor(QPalette.ButtonText, text)
+    p.setColor(QPalette.Highlight, QColor(66, 165, 245))
+    p.setColor(QPalette.HighlightedText, QColor(10, 10, 10))
+    p.setColor(QPalette.Disabled, QPalette.Text, QColor(120, 120, 128))
+    p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(120, 120, 128))
+    app.setPalette(p)
+
+
+def main():
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    app = QApplication(sys.argv)
+    app.setApplicationName("ClipSlicer")
+    apply_dark_theme(app)
+
+    missing = missing_tools()
+    if missing:
+        QMessageBox.critical(
+            None, "필요한 파일이 없습니다",
+            "다음 파일을 프로그램 폴더(또는 bin\\ 폴더)에 넣어 주세요:\n\n  • "
+            + "\n  • ".join(missing)
+            + f"\n\n프로그램 폴더: {base_dir()}\n\n"
+            "ffmpeg: https://www.gyan.dev/ffmpeg/builds/ (ffmpeg.exe, ffprobe.exe)\n"
+            "libmpv: python tools\\get_libmpv.py 실행 (또는 mpv-dev 7z 에서 libmpv-2.dll 복사)",
+        )
+        return 1
+
+    from app.mainwindow import MainWindow  # libmpv 준비 후 import
+
+    win = MainWindow()
+    win.show()
+    files = [a for a in sys.argv[1:] if os.path.exists(a)]
+    if files:
+        win.add_files(files)
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
