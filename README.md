@@ -1,5 +1,7 @@
 # ClipSlicer
 
+[![CI](https://github.com/vtubeadmirer/clipslicer/actions/workflows/ci.yml/badge.svg)](https://github.com/vtubeadmirer/clipslicer/actions/workflows/ci.yml) [![Release](https://github.com/vtubeadmirer/clipslicer/actions/workflows/release.yml/badge.svg)](https://github.com/vtubeadmirer/clipslicer/releases)
+
 영상을 재생하다가 멈춘 지점에 가위 표시만 찍으면, 구간별로 각각 저장해 주는 가벼운 Windows 영상 자르기 도구입니다.
 ffmpeg + libmpv + PySide6 로 만들었습니다.
 
@@ -59,6 +61,17 @@ python tools\make_icon.py         # assets\icon.ico 생성 (선택)
 실행: `python main.py` 또는 `run.bat`
 
 ## 배포용 빌드
+
+### GitHub Actions 로 자동 빌드
+
+`v0.2.0` 같은 태그를 push 하면 Actions 가 ffmpeg·libmpv 를 받아 exe 를 빌드하고 zip 을 [Releases](https://github.com/vtubeadmirer/clipslicer/releases) 에 올립니다.
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+### 로컬 빌드
 
 ```
 .\build.ps1
