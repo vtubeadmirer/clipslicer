@@ -4,6 +4,14 @@
 압축 해제: 7-Zip / Bandizip / NanaZip 이 있으면 그걸 쓰고, 없으면 py7zr 로 시도
 (mpv 빌드는 BCJ2 필터를 쓰기 때문에 py7zr 로는 실패할 수 있음 — 그 경우 7-Zip 이나 Bandizip 설치).
 """
+import sys
+
+# CI 러너처럼 콘솔 인코딩이 UTF-8 이 아닌 곳에서도 한글 출력이 죽지 않게
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 import io
 import json
 import os

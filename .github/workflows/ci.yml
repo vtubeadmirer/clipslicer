@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
 jobs:
   test:
     runs-on: windows-latest
@@ -38,8 +42,10 @@ jobs:
 
       - name: ffmpeg 다운로드 (캐시 없을 때)
         if: steps.ffcache.outputs.cache-hit != 'true'
-        continue-on-error: true
         run: python tools/get_ffmpeg.py
 
-      - name: 통합 테스트 (실제 자르기; ffmpeg 없으면 건너뜀)
-        run: pytest -q tests/test_ffmpeg_integration.py -rs
+      - name: ffmpeg 확인
+        run: bin/ffmpeg/ffmpeg.exe -version
+
+      - name: 통합 테스트 (실제 자르기)
+        run: pytest -q tests/test_ffmpeg_integration.py tests/test_features.py tests/test_updater.py -rs

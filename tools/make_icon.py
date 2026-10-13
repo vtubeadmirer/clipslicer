@@ -1,4 +1,12 @@
 """assets/icon.png, assets/icon.ico 생성 (Pillow 필요)."""
+import sys
+
+# CI 러너처럼 콘솔 인코딩이 UTF-8 이 아닌 곳에서도 한글 출력이 죽지 않게
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 import os
 import sys
 

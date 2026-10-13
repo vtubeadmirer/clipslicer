@@ -5,6 +5,14 @@ BtbN/FFmpeg-Builds 의 특정 autobuild 태그에 고정 (재현 가능한 빌�
 
 사용: python tools/get_ffmpeg.py [--tag autobuild-YYYY-MM-DD-HH-MM]
 """
+import sys
+
+# CI 러너처럼 콘솔 인코딩이 UTF-8 이 아닌 곳에서도 한글 출력이 죽지 않게
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 import io
 import json
 import os
