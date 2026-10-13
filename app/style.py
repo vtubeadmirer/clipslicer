@@ -33,6 +33,9 @@ QPushButton#exportBtn { background: #42a5f5; color: #0a0a0a; font-weight: bold; 
 QPushButton#exportBtn:hover { background: #64b5f6; }
 QPushButton#exportBtn:disabled { background: #2c3e50; color: #778; }
 
+QPushButton#updateBtn { background: #2e7d32; color: #fff; border-color: #2e7d32; padding: 2px 10px; font-weight: bold; }
+QPushButton#updateBtn:hover { background: #43a047; }
+
 QToolButton { padding: 4px 6px; font-size: 13px; border-radius: 4px; }
 QToolButton:hover { background: #3a3a44; }
 QToolButton#playBtn { font-size: 18px; min-width: 40px; background: #35353d; border: 1px solid #4a4a54; }

@@ -394,6 +394,89 @@ class DownloadDialog(QDialog):
         self.reject()
 
 
+class UpdateDialog(QDialog):
+    """새 버전 안내 + 다운로드. 결과: self.action in ('update', 'later', 'skip'), self.new_dir."""
+
+    def __init__(self, parent, rel: dict, current: str, worker_factory, can_update: bool, why_not: str):
+        super().__init__(parent)
+        self.setWindowTitle("새 버전이 있습니다")
+        self.resize(600, 460)
+        self.rel = rel
+        self.worker_factory = worker_factory
+        self.worker = None
+        self.action = "later"
+        self.new_dir = ""
+        lay = QVBoxLayout(self)
+        head = QLabel(f"<b style='font-size:15px'>ClipSlicer {rel['version']}</b> &nbsp; (지금 {current})"
+                      + (f" &nbsp;·&nbsp; {rel['zip_size'] / 1e6:.0f} MB" if rel.get("zip_size") else ""))
+        head.setTextFormat(Qt.RichText)
+        lay.addWidget(head)
+        from PySide6.QtWidgets import QTextBrowser
+        notes = QTextBrowser()
+        notes.setOpenExternalLinks(True)
+        notes.setMarkdown(rel.get("notes") or "_변경 내용이 적혀 있지 않습니다._")
+        lay.addWidget(notes, 1)
+        if can_update:
+            info = QLabel("'지금 업데이트'를 누르면 받아서 검증한 뒤, 프로그램을 닫고 파일을 교체하고 다시 엽니다.\n"
+                          "설정·로그·작업 파일은 그대로 유지되고, 이전 버전은 _backup 폴더에 남습니다.")
+        else:
+            info = QLabel(f"이 환경에서는 자동 교체가 안 됩니다: {why_not}\n아래 '다운로드 페이지'에서 받아 직접 바꿔 주세요.")
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #9aa0a6;")
+        lay.addWidget(info)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1000)
+        self.progress.setFormat("")
+        self.progress.hide()
+        lay.addWidget(self.progress)
+        row = QHBoxLayout()
+        b_page = QPushButton("다운로드 페이지")
+        b_page.clicked.connect(lambda: os.startfile(rel.get("url") or "https://github.com/vtubeadmirer/clipslicer/releases"))
+        row.addWidget(b_page)
+        b_skip = QPushButton("이 버전 건너뛰기")
+        b_skip.clicked.connect(self._skip)
+        row.addWidget(b_skip)
+        row.addStretch(1)
+        self.b_later = QPushButton("나중에")
+        self.b_later.clicked.connect(self._later)
+        row.addWidget(self.b_later)
+        self.b_update = QPushButton("지금 업데이트")
+        self.b_update.setObjectName("exportBtn")
+        self.b_update.setEnabled(can_update)
+        self.b_update.setDefault(True)
+        self.b_update.clicked.connect(self._start)
+        row.addWidget(self.b_update)
+        lay.addLayout(row)
+
+    def _skip(self):
+        self.action = "skip"
+        self.reject()
+
+    def _later(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            self.worker.wait(3000)
+        self.action = "later"
+        self.reject()
+
+    def _start(self):
+        self.b_update.setEnabled(False)
+        self.progress.show()
+        self.worker = self.worker_factory(self.rel)
+        self.worker.progress.connect(lambda f, t: (self.progress.setValue(int(f * 1000)), self.progress.setFormat(f"%p%  {t}")))
+        self.worker.done.connect(self._done)
+        self.worker.start()
+
+    def _done(self, new_dir: str, error: str):
+        if error:
+            self.progress.setFormat("실패: " + error)
+            self.b_update.setEnabled(True)
+            return
+        self.new_dir = new_dir
+        self.action = "update"
+        self.accept()
+
+
 def ask_overwrite(parent, existing: list[str]) -> str:
     """'overwrite' | 'rename' | 'cancel'"""
     shown = "\n".join(existing[:8]) + ("\n…" if len(existing) > 8 else "")

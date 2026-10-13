@@ -48,16 +48,23 @@ jobs:
           $ver = "${{ github.ref_name }}"
           if ($ver -notlike "v*") { $ver = "dev-" + "${{ github.sha }}".Substring(0, 7) }
           Compress-Archive -Path dist\ClipSlicer -DestinationPath "ClipSlicer-$ver-win64.zip"
+          $hash = (Get-FileHash "ClipSlicer-$ver-win64.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash *ClipSlicer-$ver-win64.zip" | Out-File -FilePath "ClipSlicer-$ver-win64.zip.sha256" -Encoding ascii
           "ZIP=ClipSlicer-$ver-win64.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHA=ClipSlicer-$ver-win64.zip.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - uses: actions/upload-artifact@v4
         with:
           name: ClipSlicer-win64
-          path: ${{ env.ZIP }}
+          path: |
+            ${{ env.ZIP }}
+            ${{ env.SHA }}
 
       - name: GitHub Release 생성
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ZIP }}
+          files: |
+            ${{ env.ZIP }}
+            ${{ env.SHA }}
           generate_release_notes: true

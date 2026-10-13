@@ -79,6 +79,9 @@ def main():
     files = [a for a in sys.argv[1:] if os.path.exists(a)]
     if files:
         win.add_files(files)
+    for flag in ("--updated", "--update-failed"):
+        if flag in sys.argv[1:]:
+            win.notify_startup_flag(flag)
     return app.exec()
 
 

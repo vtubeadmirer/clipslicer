@@ -18,7 +18,8 @@ import logging
 
 from .paths import make_settings
 from .logging_setup import log_dir
-from .dialogs import SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, TimestampDialog, CropDialog, DownloadDialog
+from . import updater
+from .dialogs import SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, TimestampDialog, CropDialog, DownloadDialog, UpdateDialog
 from .help import HelpDialog
 from .player import MpvWidget
 from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN, fmt_time_file
@@ -124,6 +125,9 @@ class MainWindow(QMainWindow):
         self.export_worker: ExportWorker | None = None
         self.silence_worker: SilenceWorker | None = None
         self.scene_worker: SceneWorker | None = None
+        self.update_worker = None
+        self.update_info: dict | None = None
+        self._update_manual = False
         self.loop_idx = -1
         self.preview_active = False
         self.gpu_encoder: str | None = None
@@ -142,6 +146,7 @@ class MainWindow(QMainWindow):
         self._build_shortcuts()
         self._restore_settings()
         self._start_gpu_detect()
+        QTimer.singleShot(3000, self._auto_check_updates)
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
@@ -423,6 +428,13 @@ class MainWindow(QMainWindow):
         self.splitter = root
 
         # 상태 표시줄
+        self.btn_update = QPushButton("")
+        self.btn_update.setObjectName("updateBtn")
+        self.btn_update.setToolTip("새 버전 보기")
+        self.btn_update.setFocusPolicy(Qt.NoFocus)
+        self.btn_update.clicked.connect(self.show_update_dialog)
+        self.btn_update.hide()
+        self.statusBar().addPermanentWidget(self.btn_update)
         self.lbl_zoom = QLabel("")
         self.lbl_gpu = QLabel("GPU 확인 중…")
         self.lbl_saved = QLabel("")
@@ -540,6 +552,8 @@ class MainWindow(QMainWindow):
         self.act_cache = QAction("분석 결과 캐시 저장 (.clipslicer.cache)", self, checkable=True, checked=True)
         self.act_cache.setToolTip("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다")
         m_set.addAction(self.act_cache)
+        self.act_update = QAction("시작할 때 새 버전 확인 (하루 1회, GitHub 조회)", self, checkable=True, checked=True)
+        m_set.addAction(self.act_update)
         self.act_compat = QAction("호환 모드 — 화면이 검게 나올 때 (재시작 필요)", self, checkable=True)
         self.act_compat.setChecked(self.settings.value("compat_mode", "0") == "1")
         self.act_compat.toggled.connect(self._on_compat_toggled)
@@ -566,6 +580,10 @@ class MainWindow(QMainWindow):
         m_help.addAction(a)
         a = QAction("로그 폴더 열기", self)
         a.triggered.connect(lambda: os.startfile(log_dir()))
+        m_help.addAction(a)
+        m_help.addSeparator()
+        a = QAction("업데이트 확인…", self)
+        a.triggered.connect(lambda: self.check_updates(manual=True))
         m_help.addAction(a)
         self._rebuild_recent_menu()
 
@@ -613,6 +631,7 @@ class MainWindow(QMainWindow):
         self.act_gpu.setChecked(s.value("use_gpu", "1") == "1")
         self.act_autosave.setChecked(s.value("autosave", "1") == "1")
         self.act_cache.setChecked(s.value("use_cache", "1") == "1")
+        self.act_update.setChecked(s.value("check_updates", "1") == "1")
         self.act_keyframes.setChecked(s.value("show_keyframes", "1") == "1")
         self.pattern = s.value("pattern", DEFAULT_PATTERN) or DEFAULT_PATTERN
         self._on_output_changed(0)
@@ -636,6 +655,7 @@ class MainWindow(QMainWindow):
         s.setValue("use_gpu", "1" if self.act_gpu.isChecked() else "0")
         s.setValue("autosave", "1" if self.act_autosave.isChecked() else "0")
         s.setValue("use_cache", "1" if self.act_cache.isChecked() else "0")
+        s.setValue("check_updates", "1" if self.act_update.isChecked() else "0")
         s.setValue("show_keyframes", "1" if self.act_keyframes.isChecked() else "0")
         s.setValue("pattern", self.pattern)
         s.setValue("volume", self.sl_volume.value())
@@ -1269,6 +1289,75 @@ class MainWindow(QMainWindow):
             self._set_loop(-1)
             self._changed()
         self.statusBar().showMessage(f"장면 전환 {len(times)}개 → 마커 {n}개 추가 (Ctrl+Z 로 되돌리기)", 6000)
+
+    # ---- 업데이트 ----
+    def _auto_check_updates(self):
+        if not self.act_update.isChecked():
+            return
+        import datetime
+        today = datetime.date.today().isoformat()
+        if self.settings.value("last_update_check", "") == today:
+            return
+        self.settings.setValue("last_update_check", today)
+        self.check_updates(manual=False)
+
+    def check_updates(self, manual: bool):
+        if self.update_worker and self.update_worker.isRunning():
+            return
+        self._update_manual = manual
+        if manual:
+            self.statusBar().showMessage("업데이트 확인 중…", 5000)
+        self.update_worker = updater.UpdateCheckWorker(__version__, self)
+        self.update_worker.result.connect(self._on_update_result)
+        self.update_worker.start()
+
+    def _on_update_result(self, rel):
+        if not rel:
+            if self._update_manual:
+                QMessageBox.information(self, "업데이트 확인", f"지금 버전 {__version__} 이 최신입니다.\n(또는 확인에 실패했습니다 — 로그 참고)")
+            return
+        if not self._update_manual and self.settings.value("skip_version", "") == rel["version"]:
+            return
+        self.update_info = rel
+        self.btn_update.setText(f"⬆ 새 버전 {rel['version']}")
+        self.btn_update.show()
+        self.statusBar().showMessage(f"새 버전 {rel['version']} 이 있습니다. 오른쪽 아래 버튼을 누르세요.", 8000)
+        if self._update_manual:
+            self.show_update_dialog()
+
+    def show_update_dialog(self):
+        if not self.update_info:
+            return
+        can, why = updater.can_self_update()
+        if self.export_worker and self.export_worker.isRunning():
+            can, why = False, "내보내기가 진행 중입니다. 끝난 뒤 다시 시도하세요"
+        d = UpdateDialog(self, self.update_info, __version__,
+                         lambda rel: updater.UpdateDownloadWorker(rel, self), can, why)
+        d.exec()
+        if d.action == "skip":
+            self.settings.setValue("skip_version", self.update_info["version"])
+            self.btn_update.hide()
+        elif d.action == "update" and d.new_dir:
+            self._apply_update(d.new_dir)
+
+    def _apply_update(self, new_dir: str):
+        if QMessageBox.question(self, "업데이트", "프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다.\n계속할까요?") != QMessageBox.Yes:
+            return
+        try:
+            updater.launch_replacer(new_dir)
+        except Exception as ex:
+            LOG.exception("교체 스크립트 실행 실패")
+            QMessageBox.critical(self, "업데이트", f"교체를 시작하지 못했습니다.\n{ex}")
+            return
+        self._updating = True
+        self.close()
+
+    def notify_startup_flag(self, flag: str):
+        if flag == "--updated":
+            self.statusBar().showMessage(f"업데이트 완료 — ClipSlicer {__version__}", 10000)
+            LOG.info("업데이트 완료 후 재시작")
+        elif flag == "--update-failed":
+            QMessageBox.warning(self, "업데이트 실패", "파일 교체에 실패해 이전 버전으로 되돌렸습니다.\nlogs\\update.log 를 확인해 주세요.")
 
     # ---- URL 다운로드 ----
     def open_url(self):
