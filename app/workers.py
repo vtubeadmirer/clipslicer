@@ -98,13 +98,18 @@ class SceneWorker(QThread):
 
 
 class DownloadWorker(QThread):
-    """yt-dlp 로 URL 다운로드. progress(0~1, 상태글), done(파일경로 또는 '', 오류)."""
+    """yt-dlp 로 URL 다운로드. progress(0~1, 상태글), done(파일경로 또는 '', 오류).
+
+    section=(start, end) 를 주면 그 구간만 받는다. HLS(네이버 VOD 등)는 세그먼트를 직접 골라 받고,
+    그 외(유튜브 등)는 yt-dlp 의 구간 다운로드(ffmpeg)를 쓴다.
+    """
     progress = Signal(float, str)
     done = Signal(str, str)
 
-    def __init__(self, url: str, out_dir: str, quality: str = "best", parent=None):
+    def __init__(self, url: str, out_dir: str, quality: str = "best", section: tuple[float, float] | None = None,
+                 parent=None):
         super().__init__(parent)
-        self.url, self.out_dir, self.quality = url, out_dir, quality
+        self.url, self.out_dir, self.quality, self.section = url, out_dir, quality, section
         self._cancel = False
 
     def cancel(self):
@@ -113,38 +118,11 @@ class DownloadWorker(QThread):
     def _fmt(self) -> str:
         if self.quality in ("1080", "720", "480"):
             h = self.quality
-            return f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={h}]+bestaudio/best[height<={h}]/best"
+            return (f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={h}]+bestaudio"
+                    f"/best[height<={h}]/worstvideo[height>{h}]+bestaudio/worst[height>{h}]/best")
         return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
 
-    def run(self):
-        try:
-            import yt_dlp
-        except ImportError:
-            self.done.emit("", "yt-dlp 모듈이 없습니다 (pip install yt-dlp)")
-            return
-        result = {"path": ""}
-
-        def hook(d):
-            if self._cancel:
-                raise yt_dlp.utils.DownloadCancelled()
-            st = d.get("status")
-            if st == "downloading":
-                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                got = d.get("downloaded_bytes") or 0
-                frac = got / total if total else 0.0
-                spd = d.get("_speed_str") or d.get("speed") or ""
-                eta = d.get("_eta_str") or ""
-                self.progress.emit(min(frac, 0.99), f"받는 중 {spd} {eta}".strip())
-            elif st == "finished":
-                self.progress.emit(0.99, "합치는 중…")
-
-        def pp_hook(d):
-            if d.get("status") == "finished" and d.get("postprocessor") in ("MoveFiles", "Merger"):
-                info = d.get("info_dict") or {}
-                p = info.get("filepath") or info.get("_filename")
-                if p:
-                    result["path"] = p
-
+    def _base_opts(self, hook) -> dict:
         ffdir = os.path.dirname(ffmpeg_tools.find_tool("ffmpeg") or "")
         opts = {
             "format": self._fmt(),
@@ -155,25 +133,41 @@ class DownloadWorker(QThread):
             "noprogress": True,
             "no_warnings": True,
             "progress_hooks": [hook],
-            "postprocessor_hooks": [pp_hook],
             "windowsfilenames": True,
             "retries": 3,
         }
         if ffdir:
             opts["ffmpeg_location"] = ffdir
+        return opts
+
+    def run(self):
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(self.url, download=True)
-            path = result["path"]
-            if not path:
-                req = (info or {}).get("requested_downloads") or []
-                if req:
-                    path = req[0].get("filepath") or ""
-            if not path and info:
-                path = ydl.prepare_filename(info)
-                base = os.path.splitext(path)[0]
-                if not os.path.exists(path) and os.path.exists(base + ".mp4"):
-                    path = base + ".mp4"
+            import yt_dlp
+            from . import ytdlp_patches
+            ytdlp_patches.apply()
+        except ImportError:
+            self.done.emit("", "yt-dlp 모듈이 없습니다 (pip install yt-dlp)")
+            return
+
+        def hook(d):
+            if self._cancel:
+                raise yt_dlp.utils.DownloadCancelled()
+            st = d.get("status")
+            if st == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                got = d.get("downloaded_bytes") or 0
+                frac = got / total if total else 0.0
+                spd = d.get("_speed_str") or ""
+                eta = d.get("_eta_str") or ""
+                self.progress.emit(min(frac, 0.99), f"받는 중 {spd} {eta}".strip())
+            elif st == "finished":
+                self.progress.emit(0.99, "합치는 중…")
+
+        try:
+            if self.section:
+                path = self._download_section(yt_dlp, hook)
+            else:
+                path = self._download_full(yt_dlp, hook)
             if path and os.path.exists(path):
                 self.progress.emit(1.0, "완료")
                 self.done.emit(path, "")
@@ -188,6 +182,87 @@ class DownloadWorker(QThread):
                 if "ERROR:" in msg:
                     msg = msg.split("ERROR:", 1)[1].strip()
                 self.done.emit("", msg[:400])
+
+    # ---- 전체 ----
+    def _download_full(self, yt_dlp, hook) -> str:
+        result = {"path": ""}
+
+        def pp_hook(d):
+            if d.get("status") == "finished" and d.get("postprocessor") in ("MoveFiles", "Merger"):
+                info = d.get("info_dict") or {}
+                p = info.get("filepath") or info.get("_filename")
+                if p:
+                    result["path"] = p
+
+        opts = self._base_opts(hook)
+        opts["postprocessor_hooks"] = [pp_hook]
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(self.url, download=True)
+            path = result["path"]
+            if not path:
+                req = (info or {}).get("requested_downloads") or []
+                if req:
+                    path = req[0].get("filepath") or ""
+            if not path and info:
+                path = ydl.prepare_filename(info)
+                base = os.path.splitext(path)[0]
+                if not os.path.exists(path) and os.path.exists(base + ".mp4"):
+                    path = base + ".mp4"
+        return path
+
+    # ---- 구간 ----
+    def _download_section(self, yt_dlp, hook) -> str:
+        from . import hls_section
+        from .segments import fmt_time_file, safe_filename
+        start, end = self.section
+        self.progress.emit(0.0, "영상 정보 읽는 중…")
+        opts = self._base_opts(hook)
+        with yt_dlp.YoutubeDL(dict(opts, skip_download=True)) as ydl:
+            info = ydl.extract_info(self.url, download=False)
+        if info.get("_type") == "playlist":
+            info = (info.get("entries") or [None])[0] or info
+        title = safe_filename(str(info.get("title") or info.get("id") or "video"))[:80]
+        vid = info.get("id") or "x"
+        duration = float(info.get("duration") or 0)
+        if duration and start >= duration:
+            raise RuntimeError(f"시작 시각이 영상 길이({fmt_time_file(duration)})를 넘습니다")
+        if duration:
+            end = min(end, duration)
+        base = os.path.join(self.out_dir, f"{title} [{vid}] {fmt_time_file(start)}-{fmt_time_file(end)}")
+        dst = base + ".mp4"
+
+        fmts = info.get("requested_formats") or [info]
+        hls = [f for f in fmts if (f.get("protocol") or "").startswith("m3u8")]
+        if len(fmts) == 1 and hls:
+            # 묶인(muxed) HLS → 세그먼트 직접 선택 (토큰 붙은 네이버 VOD 포함)
+            f = fmts[0]
+            ts = base + ".ts"
+            self.progress.emit(0.02, "세그먼트 목록 읽는 중…")
+            seg_start, _seg_end = hls_section.download_section(
+                f["url"], start, end, ts, f.get("extra_param_to_segment_url", ""),
+                lambda p, t: self.progress.emit(0.02 + p * 0.9, t), lambda: self._cancel)
+            self.progress.emit(0.93, "잘라서 mp4 로 저장 중…")
+            cutter = ffmpeg_tools.Cutter()
+            # 받은 조각의 앞부분(seg_start~start)을 잘라낸다. 키프레임 단위.
+            cutter.cut_copy(ts, max(0.0, start - seg_start), max(0.0, start - seg_start) + (end - start), dst,
+                            lambda p: self.progress.emit(0.93 + p * 0.06, "저장 중…"))
+            try:
+                os.remove(ts)
+            except OSError:
+                pass
+            return dst
+        # 그 외: yt-dlp 구간 다운로드 (ffmpeg 필요)
+        opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [(start, end)])
+        opts["force_keyframes_at_cuts"] = False
+        opts["outtmpl"] = base + ".%(ext)s"
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([self.url])
+        if os.path.exists(dst):
+            return dst
+        for name in os.listdir(self.out_dir):
+            if name.startswith(os.path.basename(base)):
+                return os.path.join(self.out_dir, name)
+        return ""
 
 
 class GpuDetectWorker(QThread):

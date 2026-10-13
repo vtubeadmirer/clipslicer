@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QWidget, QToolButton, QFileDialog,
 )
 
-from .segments import DEFAULT_PATTERN, parse_timestamps, fmt_time
+from .segments import DEFAULT_PATTERN, parse_timestamps, fmt_time, parse_time
 
 
 def _buttons(dialog, ok_text="확인"):
@@ -325,6 +325,24 @@ class DownloadDialog(QDialog):
         b.clicked.connect(self._choose_dir)
         row.addWidget(b)
         lay.addLayout(row)
+        srow = QHBoxLayout()
+        from PySide6.QtWidgets import QCheckBox
+        self.cb_section = QCheckBox("구간만 받기")
+        self.cb_section.setToolTip("긴 다시보기는 필요한 구간만 받으세요. 예: 1:02:00 ~ 1:15:30")
+        self.ed_start = QLineEdit()
+        self.ed_start.setPlaceholderText("시작 (예: 1:02:00)")
+        self.ed_end = QLineEdit()
+        self.ed_end.setPlaceholderText("끝 (예: 1:15:30)")
+        for w in (self.ed_start, self.ed_end):
+            w.setEnabled(False)
+            w.setFixedWidth(130)
+        self.cb_section.toggled.connect(lambda on: (self.ed_start.setEnabled(on), self.ed_end.setEnabled(on)))
+        srow.addWidget(self.cb_section)
+        srow.addWidget(self.ed_start)
+        srow.addWidget(QLabel("~"))
+        srow.addWidget(self.ed_end)
+        srow.addStretch(1)
+        lay.addLayout(srow)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setFormat("대기 중")
@@ -364,10 +382,17 @@ class DownloadDialog(QDialog):
         if not self.out_dir:
             QMessageBox.warning(self, "저장 폴더", "저장 폴더를 지정해 주세요.")
             return
+        section = None
+        if self.cb_section.isChecked():
+            a, b = parse_time(self.ed_start.text()), parse_time(self.ed_end.text())
+            if a is None or b is None or b <= a:
+                QMessageBox.warning(self, "구간", "시작과 끝 시각을 1:02:00 같은 형식으로 넣어 주세요 (끝이 시작보다 커야 함).")
+                return
+            section = (a, b)
         os.makedirs(self.out_dir, exist_ok=True)
         self.b_start.setEnabled(False)
         self.ed_url.setEnabled(False)
-        self.worker = self.worker_factory(url, self.out_dir, self.quality)
+        self.worker = self.worker_factory(url, self.out_dir, self.quality, section)
         self.worker.progress.connect(self._on_progress)
         self.worker.done.connect(self._on_done)
         self.worker.start()

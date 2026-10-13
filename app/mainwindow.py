@@ -1363,7 +1363,7 @@ class MainWindow(QMainWindow):
     def open_url(self):
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
-        d = DownloadDialog(self, lambda u, o, q: DownloadWorker(u, o, q, self), default_dir,
+        d = DownloadDialog(self, lambda u, o, q, sec=None: DownloadWorker(u, o, q, sec, self), default_dir,
                            self.settings.value("dl_quality", "best"))
         if d.exec() and d.result_path:
             self.settings.setValue("dl_dir", d.out_dir)
