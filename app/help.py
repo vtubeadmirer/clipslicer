@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QTabWidget, QTextBrowser, QDialogButtonBox
 
 from . import __version__
+from .i18n import language, tr
 
 CSS = """
 <style>
@@ -281,6 +282,7 @@ Google Cloud 콘솔에서 프로젝트를 만들고 <code>client_secret.json</co
  <tr><td>유튜브 계정 연결…</td><td>OAuth 클라이언트 등록과 로그인. "유튜브 올리기" 탭 참고.</td></tr>
  <tr><td>유튜브 설명 템플릿…</td><td>올릴 때 설명란에 미리 채울 내용.</td></tr>
  <tr><td>파일명 규칙…</td><td>출력 파일 이름 패턴.</td></tr>
+ <tr><td>언어 / Language</td><td>한국어 / English / 시스템 설정 따라가기. 다시 실행하면 적용됩니다.</td></tr>
 </table>
 
 <h2>작업 파일 (.clipslicer.json)</h2>
@@ -350,11 +352,15 @@ MKV 의 자막·첨부 스트림을 MP4 로 복사하려 함 (이때는 "정확�
 class HelpDialog(QDialog):
     def __init__(self, parent=None, page: int = 0):
         super().__init__(parent)
-        self.setWindowTitle("ClipSlicer 도움말")
+        self.setWindowTitle(tr("ClipSlicer 도움말"))
         self.resize(760, 620)
         lay = QVBoxLayout(self)
         self.tabs = QTabWidget()
-        for title, html in PAGES:
+        pages = PAGES
+        if language() == "en":
+            from .help_en import PAGES_EN
+            pages = PAGES_EN
+        for title, html in pages:
             tb = QTextBrowser()
             tb.setOpenExternalLinks(True)
             tb.setHtml(CSS + "<body>" + html + "</body>")
@@ -362,7 +368,7 @@ class HelpDialog(QDialog):
         self.tabs.setCurrentIndex(page)
         lay.addWidget(self.tabs, 1)
         bb = QDialogButtonBox(QDialogButtonBox.Close)
-        bb.button(QDialogButtonBox.Close).setText("닫기")
+        bb.button(QDialogButtonBox.Close).setText(tr("닫기"))
         bb.rejected.connect(self.reject)
         bb.clicked.connect(self.accept)
         lay.addWidget(bb)

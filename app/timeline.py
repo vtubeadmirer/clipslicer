@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+from .i18n import tr
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QPoint, QSize
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont, QPixmap, QLinearGradient
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QScrollBar, QSizePolicy
@@ -158,7 +159,7 @@ class TimelineCanvas(QWidget):
 
         if not self.project or self.duration <= 0:
             p.setPen(QColor(110, 110, 120))
-            p.drawText(self.rect(), Qt.AlignCenter, "영상을 열거나 여기에 끌어다 놓으세요")
+            p.drawText(self.rect(), Qt.AlignCenter, tr("영상을 열거나 여기에 끌어다 놓으세요"))
             return
 
         band = QRectF(0, 0, w, THUMB_H)
@@ -196,7 +197,7 @@ class TimelineCanvas(QWidget):
         if not self.project.thumbs:
             p.fillRect(band, QColor(40, 40, 46))
             p.setPen(QColor(90, 90, 100))
-            p.drawText(band, Qt.AlignCenter, "썸네일 생성 중…")
+            p.drawText(band, Qt.AlignCenter, tr("썸네일 생성 중…"))
             return
         tile_w = int(THUMB_H * 16 / 9)
         n_tiles = max(1, int(band.width() // tile_w) + 1)

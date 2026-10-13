@@ -6,6 +6,7 @@ settings.ini, logs\\, 작업 파일은 건드리지 않는다.
 """
 from __future__ import annotations
 
+from .i18n import tr
 import hashlib
 import json
 import logging
@@ -69,7 +70,7 @@ def parse_release(data: dict) -> dict | None:
 def can_self_update() -> tuple[bool, str]:
     """(가능 여부, 안 되는 이유). exe 로 실행 중이고 프로그램 폴더에 쓸 수 있어야 한다."""
     if not getattr(sys, "frozen", False):
-        return False, "소스로 실행 중입니다 (git pull 로 갱신)"
+        return False, tr("소스로 실행 중입니다 (git pull 로 갱신)")
     d = base_dir()
     try:
         probe = os.path.join(d, ".update_write_test")
@@ -77,7 +78,7 @@ def can_self_update() -> tuple[bool, str]:
             pass
         os.remove(probe)
     except OSError:
-        return False, "프로그램 폴더에 쓸 수 없습니다 (읽기 전용 위치)"
+        return False, tr("프로그램 폴더에 쓸 수 없습니다 (읽기 전용 위치)")
     return True, ""
 
 
@@ -125,14 +126,14 @@ class UpdateDownloadWorker(QThread):
             got = 0
             while True:
                 if self._cancel:
-                    raise RuntimeError("취소됨")
+                    raise RuntimeError(tr("취소됨"))
                 chunk = r.read(1 << 18)
                 if not chunk:
                     break
                 f.write(chunk)
                 got += len(chunk)
                 if total:
-                    self.progress.emit(min(got / total, 0.99) * 0.85, f"받는 중 {got / 1e6:.0f} / {total / 1e6:.0f} MB")
+                    self.progress.emit(min(got / total, 0.99) * 0.85, tr("받는 중 {0:.0f} / {1:.0f} MB").format(got / 1e6, total / 1e6))
 
     def run(self):
         work = os.path.join(tempfile.gettempdir(), "ClipSlicer-update")
@@ -143,25 +144,25 @@ class UpdateDownloadWorker(QThread):
             self._fetch(self.rel["zip_url"], zip_path, self.rel.get("zip_size", 0))
 
             if self.rel.get("sha_url"):
-                self.progress.emit(0.86, "체크섬 확인 중…")
+                self.progress.emit(0.86, tr("체크섬 확인 중…"))
                 sha_path = os.path.join(work, "expected.sha256")
                 self._fetch(self.rel["sha_url"], sha_path, 0)
                 expected = open(sha_path, encoding="utf-8", errors="replace").read().split()[0].lower()
                 actual = sha256_file(zip_path)
                 if expected != actual:
-                    raise RuntimeError("받은 파일이 손상되었습니다 (체크섬 불일치). 다시 시도해 주세요.")
+                    raise RuntimeError(tr("받은 파일이 손상되었습니다 (체크섬 불일치). 다시 시도해 주세요."))
             else:
                 LOG.warning("체크섬 파일이 없어 검증을 건너뜀")
 
-            self.progress.emit(0.9, "압축 푸는 중…")
+            self.progress.emit(0.9, tr("압축 푸는 중…"))
             new_root = os.path.join(work, "new")
             with zipfile.ZipFile(zip_path) as z:
                 z.extractall(new_root)
             new_dir = find_app_dir(new_root)
             if not new_dir:
-                raise RuntimeError("압축 안에 ClipSlicer.exe 가 없습니다")
+                raise RuntimeError(tr("압축 안에 ClipSlicer.exe 가 없습니다"))
             os.remove(zip_path)
-            self.progress.emit(1.0, "준비 완료")
+            self.progress.emit(1.0, tr("준비 완료"))
             self.done.emit(new_dir, "")
         except Exception as ex:
             LOG.exception("업데이트 다운로드 실패")
@@ -185,36 +186,7 @@ def find_app_dir(root: str) -> str | None:
 
 
 # --------------------------------------------------------------------------- 교체 스크립트
-REPLACER = r"""
-# ClipSlicer 업데이트 교체 스크립트 (자동 생성)
-param([int]$ProcId, [string]$App, [string]$New, [string]$Exe)
-$ErrorActionPreference = "Continue"
-$log = Join-Path $App "logs\update.log"
-New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
-function Log($m) { "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m | Out-File -FilePath $log -Append -Encoding utf8 }
-Log "교체 시작 pid=$ProcId app=$App new=$New"
-try { Wait-Process -Id $ProcId -Timeout 60 -ErrorAction Stop } catch { }
-Start-Sleep -Milliseconds 800
-$keepDirs = @("_backup", "logs")
-$keepFiles = @("settings.ini")
-$backup = Join-Path $App "_backup"
-Log "백업"
-& robocopy $App $backup /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null
-Log "교체"
-& robocopy $New $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null
-$rc = $LASTEXITCODE
-if ($rc -ge 8) {
-  Log "실패 rc=$rc → 백업에서 복구"
-  & robocopy $backup $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null
-  Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList "--update-failed" -WorkingDirectory $App
-  exit 1
-}
-Log "성공 rc=$rc"
-Remove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Split-Path $New) -Recurse -Force -ErrorAction SilentlyContinue
-Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList "--updated" -WorkingDirectory $App
-exit 0
-"""
+REPLACER = ("\n# ClipSlicer 업데이트 교체 스크립트 (자동 생성)\nparam([int]$ProcId, [string]$App, [string]$New, [string]$Exe)\n$ErrorActionPreference = \"Continue\"\n$log = Join-Path $App \"logs\\update.log\"\nNew-Item -ItemType Directory -Force (Split-Path $log) | Out-Null\nfunction Log($m) { \"[{0}] {1}\" -f (Get-Date -Format \"yyyy-MM-dd HH:mm:ss\"), $m | Out-File -FilePath $log -Append -Encoding utf8 }\nLog \"교체 시작 pid=$ProcId app=$App new=$New\"\ntry { Wait-Process -Id $ProcId -Timeout 60 -ErrorAction Stop } catch { }\nStart-Sleep -Milliseconds 800\n$keepDirs = @(\"_backup\", \"logs\")\n$keepFiles = @(\"settings.ini\")\n$backup = Join-Path $App \"_backup\"\nLog \"백업\"\n& robocopy $App $backup /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\nLog \"교체\"\n& robocopy $New $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null\n$rc = $LASTEXITCODE\nif ($rc -ge 8) {\n  Log \"실패 rc=$rc → 백업에서 복구\"\n  & robocopy $backup $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\n  Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList \"--update-failed\" -WorkingDirectory $App\n  exit 1\n}\nLog \"성공 rc=$rc\"\nRemove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item -LiteralPath (Split-Path $New) -Recurse -Force -ErrorAction SilentlyContinue\nStart-Process -FilePath (Join-Path $App $Exe) -ArgumentList \"--updated\" -WorkingDirectory $App\nexit 0\n")
 
 
 def write_replacer(path: str):

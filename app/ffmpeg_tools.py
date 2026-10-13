@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+from .i18n import tr
 import array
 import json
 import logging
@@ -41,7 +42,7 @@ def probe(path: str) -> dict:
     ]
     out = _run(cmd)
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or "ffprobe 실패")
+        raise RuntimeError(out.stderr.strip() or tr("ffprobe 실패"))
     data = json.loads(out.stdout)
     info = {"duration": float(data.get("format", {}).get("duration", 0) or 0),
             "width": 0, "height": 0, "fps": 30.0, "has_audio": False,
@@ -184,7 +185,7 @@ def grab_frame(path: str, t: float, fmt: str = "png") -> bytes:
            "-frames:v", "1", "-f", "image2", "-c:v", codec, "-"]
     proc = subprocess.run(cmd, capture_output=True, **_popen_kwargs())
     if proc.returncode != 0 or not proc.stdout:
-        raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip() or "프레임을 읽지 못했습니다")
+        raise RuntimeError(proc.stderr.decode("utf-8", "replace").strip() or tr("프레임을 읽지 못했습니다"))
     return proc.stdout
 
 
@@ -311,7 +312,7 @@ class CutProcess:
                     other.pop(0)
         self.proc.wait()
         if self._cancelled:
-            return False, "취소됨"
+            return False, tr("취소됨")
         return self.proc.returncode == 0, "\n".join(other[-5:])
 
 
@@ -341,7 +342,7 @@ class Cutter:
             raise Cancelled()
         if not ok:
             LOG.error("ffmpeg 실패: %s\n  cmd: %s", msg, " ".join(cmd))
-            raise RuntimeError(msg or "ffmpeg 실패")
+            raise RuntimeError(msg or tr("ffmpeg 실패"))
         return msg
 
     # ---- 기본 명령 ----

@@ -5,6 +5,7 @@ yt-dlp 의 내장 HLS 다운로더는 구간 다운로드를 지원하지 않고
 """
 from __future__ import annotations
 
+from .i18n import tr
 import os
 import re
 import urllib.parse
@@ -67,19 +68,19 @@ def download_section(playlist_url: str, start: float, end: float, dst: str, extr
     if "#EXT-X-STREAM-INF" in text:
         variants = [l.strip() for l in text.splitlines() if l.strip() and not l.startswith("#")]
         if not variants:
-            raise RuntimeError("재생 목록에 변형이 없습니다")
+            raise RuntimeError(tr("재생 목록에 변형이 없습니다"))
         playlist_url = urllib.parse.urljoin(playlist_url, variants[0])
         if extra_query and extra_query not in playlist_url:
             playlist_url += ("&" if "?" in playlist_url else "?") + extra_query
         text = fetch(playlist_url).decode("utf-8", "replace")
     segs = parse_playlist(text, playlist_url, extra_query)
     if not segs:
-        raise RuntimeError("세그먼트를 찾지 못했습니다")
+        raise RuntimeError(tr("세그먼트를 찾지 못했습니다"))
     if re.search(r"#EXT-X-KEY:METHOD=(?!NONE)", text):
-        raise RuntimeError("암호화된 HLS 는 구간 다운로드를 지원하지 않습니다")
+        raise RuntimeError(tr("암호화된 HLS 는 구간 다운로드를 지원하지 않습니다"))
     picked = select_segments(segs, start, end)
     if not picked:
-        raise RuntimeError("요청한 구간이 영상 길이 밖입니다")
+        raise RuntimeError(tr("요청한 구간이 영상 길이 밖입니다"))
     total = len(picked)
     done = 0
     buffers: dict[int, bytes] = {}
@@ -93,18 +94,18 @@ def download_section(playlist_url: str, start: float, end: float, dst: str, extr
                 return i, fetch(picked[i][2])
             except Exception as ex:  # 재시도
                 last_err = ex
-        raise RuntimeError(f"세그먼트 {i} 다운로드 실패: {last_err}")
+        raise RuntimeError(tr("세그먼트 {0} 다운로드 실패: {1}").format(i, last_err))
 
     with open(dst, "wb") as out, ThreadPoolExecutor(max_workers=workers) as pool:
         next_write = 0
         for i, data in pool.map(get, range(total)):
             if cancel and cancel():
-                raise RuntimeError("취소됨")
+                raise RuntimeError(tr("취소됨"))
             buffers[i] = data
             while next_write in buffers:
                 out.write(buffers.pop(next_write))
                 next_write += 1
             done += 1
             if on_progress:
-                on_progress(done / total, f"세그먼트 {done}/{total}")
+                on_progress(done / total, tr("세그먼트 {0}/{1}").format(done, total))
     return picked[0][0], picked[-1][0] + picked[-1][1]

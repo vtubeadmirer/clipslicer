@@ -1,6 +1,7 @@
 """분석 결과(썸네일·파형·키프레임) 캐시. 영상 옆 <영상>.clipslicer.cache, 못 쓰면 %LOCALAPPDATA%."""
 from __future__ import annotations
 
+from .i18n import tr
 import hashlib
 import logging
 import os

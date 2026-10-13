@@ -1,4 +1,5 @@
 """외부 도구(ffmpeg, ffprobe, libmpv) 위치 탐색."""
+from .i18n import tr
 import os
 import shutil
 import sys

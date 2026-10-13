@@ -1,6 +1,7 @@
 """libmpv 를 Qt 위젯에 임베드한 플레이어."""
 from __future__ import annotations
 
+from .i18n import tr
 import locale
 
 from PySide6.QtCore import Qt, Signal

@@ -1,6 +1,7 @@
 """백그라운드 작업: 영상 분석, 무음 감지, GPU 감지, 내보내기 큐."""
 from __future__ import annotations
 
+from .i18n import tr
 import os
 import shutil
 import tempfile
@@ -146,7 +147,7 @@ class DownloadWorker(QThread):
             from . import ytdlp_patches
             ytdlp_patches.apply()
         except ImportError:
-            self.done.emit("", "yt-dlp 모듈이 없습니다 (pip install yt-dlp)")
+            self.done.emit("", tr("yt-dlp 모듈이 없습니다 (pip install yt-dlp)"))
             return
 
         def hook(d):
@@ -159,9 +160,9 @@ class DownloadWorker(QThread):
                 frac = got / total if total else 0.0
                 spd = d.get("_speed_str") or ""
                 eta = d.get("_eta_str") or ""
-                self.progress.emit(min(frac, 0.99), f"받는 중 {spd} {eta}".strip())
+                self.progress.emit(min(frac, 0.99), tr("받는 중 {0} {1}").format(spd, eta).strip())
             elif st == "finished":
-                self.progress.emit(0.99, "합치는 중…")
+                self.progress.emit(0.99, tr("합치는 중…"))
 
         try:
             if self.section:
@@ -169,13 +170,13 @@ class DownloadWorker(QThread):
             else:
                 path = self._download_full(yt_dlp, hook)
             if path and os.path.exists(path):
-                self.progress.emit(1.0, "완료")
+                self.progress.emit(1.0, tr("완료"))
                 self.done.emit(path, "")
             else:
-                self.done.emit("", "다운로드는 끝났지만 파일을 찾지 못했습니다")
+                self.done.emit("", tr("다운로드는 끝났지만 파일을 찾지 못했습니다"))
         except Exception as ex:  # DownloadCancelled 포함
             if self._cancel:
-                self.done.emit("", "취소됨")
+                self.done.emit("", tr("취소됨"))
             else:
                 LOG.exception("다운로드 실패: %s", self.url)
                 msg = str(ex)
@@ -215,7 +216,7 @@ class DownloadWorker(QThread):
         from . import hls_section
         from .segments import fmt_time_file, safe_filename
         start, end = self.section
-        self.progress.emit(0.0, "영상 정보 읽는 중…")
+        self.progress.emit(0.0, tr("영상 정보 읽는 중…"))
         opts = self._base_opts(hook)
         with yt_dlp.YoutubeDL(dict(opts, skip_download=True)) as ydl:
             info = ydl.extract_info(self.url, download=False)
@@ -225,7 +226,7 @@ class DownloadWorker(QThread):
         vid = info.get("id") or "x"
         duration = float(info.get("duration") or 0)
         if duration and start >= duration:
-            raise RuntimeError(f"시작 시각이 영상 길이({fmt_time_file(duration)})를 넘습니다")
+            raise RuntimeError(tr("시작 시각이 영상 길이({0})를 넘습니다").format(fmt_time_file(duration)))
         if duration:
             end = min(end, duration)
         base = os.path.join(self.out_dir, f"{title} [{vid}] {fmt_time_file(start)}-{fmt_time_file(end)}")
@@ -237,15 +238,15 @@ class DownloadWorker(QThread):
             # 묶인(muxed) HLS → 세그먼트 직접 선택 (토큰 붙은 네이버 VOD 포함)
             f = fmts[0]
             ts = base + ".ts"
-            self.progress.emit(0.02, "세그먼트 목록 읽는 중…")
+            self.progress.emit(0.02, tr("세그먼트 목록 읽는 중…"))
             seg_start, _seg_end = hls_section.download_section(
                 f["url"], start, end, ts, f.get("extra_param_to_segment_url", ""),
                 lambda p, t: self.progress.emit(0.02 + p * 0.9, t), lambda: self._cancel)
-            self.progress.emit(0.93, "잘라서 mp4 로 저장 중…")
+            self.progress.emit(0.93, tr("잘라서 mp4 로 저장 중…"))
             cutter = ffmpeg_tools.Cutter()
             # 받은 조각의 앞부분(seg_start~start)을 잘라낸다. 키프레임 단위.
             cutter.cut_copy(ts, max(0.0, start - seg_start), max(0.0, start - seg_start) + (end - start), dst,
-                            lambda p: self.progress.emit(0.93 + p * 0.06, "저장 중…"))
+                            lambda p: self.progress.emit(0.93 + p * 0.06, tr("저장 중…")))
             try:
                 os.remove(ts)
             except OSError:
@@ -325,18 +326,18 @@ class ExportWorker(QThread):
     def _cut_one(self, cutter: Cutter, job: ExportJob, part: ExportPart, dst: str, cb) -> str:
         if job.audio:
             cutter.cut_audio(job.src, part.start, part.end, dst, job.audio, job.info.get("acodec", ""), cb)
-            return "오디오"
+            return tr("오디오")
         if job.vertical is not None:
             cutter.cut_vertical(job.src, part.start, part.end, dst, job.info, job.vertical, cb, job.gpu)
-            return "세로 9:16"
+            return tr("세로 9:16")
         if job.mode == "precise":
             cutter.cut_encode(job.src, part.start, part.end, dst, cb, "h264", job.gpu)
-            return "재인코딩"
+            return tr("재인코딩")
         if job.mode == "smart":
             how = cutter.cut_smart(job.src, part.start, part.end, dst, job.info, job.keyframes, cb, job.gpu)
-            return {"copy": "복사", "smart": "스마트", "encode": "재인코딩"}.get(how, how)
+            return {"copy": tr("복사"), "smart": tr("스마트"), "encode": tr("재인코딩")}.get(how, how)
         cutter.cut_copy(job.src, part.start, part.end, dst, cb)
-        return "복사"
+        return tr("복사")
 
     # ---- 합치기 ----
     def _merge(self, i: int, cutter: Cutter, job: ExportJob) -> str:
@@ -345,7 +346,7 @@ class ExportWorker(QThread):
         if job.mode == "fast" and not job.audio and job.vertical is None:
             # 원본에서 구간들을 바로 읽어 한 번에 이어 붙인다 (임시 파일 없음)
             cutter.concat([(job.src, p.start, p.end) for p in job.parts], job.dst, cb, total)
-            return f"{len(job.parts)}개 구간 합침"
+            return tr("{0}개 구간 합침").format(len(job.parts))
         tmp = tempfile.mkdtemp(prefix="clipslicer_merge_")
         try:
             ext = os.path.splitext(job.dst)[1]
@@ -375,7 +376,7 @@ class ExportWorker(QThread):
                     entries.append(f)
                 done += plen
             cutter.concat(entries, job.dst, lambda p: self.jobProgress.emit(i, 0.9 + 0.1 * p), total)
-            return f"{len(job.parts)}개 구간 합침" + (f", 앞조각 {heads}개 재인코딩" if heads else "")
+            return tr("{0}개 구간 합침").format(len(job.parts)) + (tr(", 앞조각 {0}개 재인코딩").format(heads) if heads else "")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -405,7 +406,7 @@ class ExportWorker(QThread):
                 note = self._run_job(i, job)
                 ok, msg = True, note
             except Cancelled:
-                ok, msg = False, "취소됨"
+                ok, msg = False, tr("취소됨")
             except Exception as ex:
                 LOG.exception("내보내기 실패: %s", job.dst)
                 ok, msg = False, str(ex)

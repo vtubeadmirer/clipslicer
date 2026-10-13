@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from .i18n import tr
 import base64
 import ctypes
 import hashlib
@@ -34,8 +35,8 @@ UPLOAD_API = "https://www.googleapis.com/upload/youtube/v3"
 SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube"
 CHUNK = 8 * 1024 * 1024  # 8 MB (256 KB 배수여야 함)
 
-CATEGORIES = [("20", "게임"), ("22", "인물/블로그"), ("24", "엔터테인먼트"), ("10", "음악"),
-              ("17", "스포츠"), ("27", "교육"), ("28", "과학기술"), ("23", "코미디"), ("26", "노하우/스타일")]
+CATEGORIES = [("20", tr("게임")), ("22", tr("인물/블로그")), ("24", tr("엔터테인먼트")), ("10", tr("음악")),
+              ("17", tr("스포츠")), ("27", tr("교육")), ("28", tr("과학기술")), ("23", tr("코미디")), ("26", tr("노하우/스타일"))]
 
 CLIENT_FILE = "youtube_client_secret.json"
 TOKEN_FILE = "youtube_token.bin"
@@ -86,7 +87,7 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
     else:
         ok = fn(ctypes.byref(inp), None, None, None, None, 0, ctypes.byref(out))
     if not ok:
-        raise YouTubeError("토큰 암호화/복호화 실패 (DPAPI)")
+        raise YouTubeError(tr("토큰 암호화/복호화 실패 (DPAPI)"))
     try:
         return ctypes.string_at(out.pbData, out.cbData)
     finally:
@@ -105,12 +106,12 @@ def unprotect(data: bytes) -> bytes:
 def load_client(path: str | None = None) -> dict:
     p = path or client_path()
     if not os.path.isfile(p):
-        raise YouTubeError("client_secret.json 이 없습니다. 설정 ▸ 유튜브 계정 연결에서 등록하세요.")
+        raise YouTubeError(tr("client_secret.json 이 없습니다. 설정 ▸ 유튜브 계정 연결에서 등록하세요."))
     with open(p, encoding="utf-8") as f:
         data = json.load(f)
     c = data.get("installed") or data.get("web") or data
     if not c.get("client_id") or not c.get("client_secret"):
-        raise YouTubeError("client_secret.json 형식이 올바르지 않습니다 (client_id / client_secret 없음)")
+        raise YouTubeError(tr("client_secret.json 형식이 올바르지 않습니다 (client_id / client_secret 없음)"))
     return {"client_id": c["client_id"], "client_secret": c["client_secret"]}
 
 
@@ -173,18 +174,18 @@ def _api_error(status: int, body: bytes) -> YouTubeError:
     except Exception:
         msg = body[:200].decode("utf-8", "replace")
     friendly = {
-        "quotaExceeded": "오늘의 YouTube API 할당량을 다 썼습니다 (하루 약 6개 업로드). 내일 다시 시도하세요.",
-        "uploadLimitExceeded": "채널의 업로드 한도를 넘었습니다. 잠시 뒤 다시 시도하세요.",
-        "youtubeSignupRequired": "이 구글 계정에는 유튜브 채널이 없습니다. 유튜브에서 채널을 먼저 만드세요.",
-        "forbidden": "권한이 없습니다. 설정에서 계정 연결을 다시 하세요.",
-        "invalidTitle": "제목이 비었거나 너무 깁니다 (100자 이내).",
-        "invalidDescription": "설명이 너무 깁니다 (5000자 이내).",
-        "invalidTags": "태그가 너무 많거나 깁니다 (전체 500자 이내).",
-        "insufficientPermissions": "권한이 부족합니다. 설정에서 계정 연결을 다시 하세요.",
+        "quotaExceeded": tr("오늘의 YouTube API 할당량을 다 썼습니다 (하루 약 6개 업로드). 내일 다시 시도하세요."),
+        "uploadLimitExceeded": tr("채널의 업로드 한도를 넘었습니다. 잠시 뒤 다시 시도하세요."),
+        "youtubeSignupRequired": tr("이 구글 계정에는 유튜브 채널이 없습니다. 유튜브에서 채널을 먼저 만드세요."),
+        "forbidden": tr("권한이 없습니다. 설정에서 계정 연결을 다시 하세요."),
+        "invalidTitle": tr("제목이 비었거나 너무 깁니다 (100자 이내)."),
+        "invalidDescription": tr("설명이 너무 깁니다 (5000자 이내)."),
+        "invalidTags": tr("태그가 너무 많거나 깁니다 (전체 500자 이내)."),
+        "insufficientPermissions": tr("권한이 부족합니다. 설정에서 계정 연결을 다시 하세요."),
     }.get(reason)
     if status in (401,):
-        friendly = "로그인이 만료되었습니다. 설정 ▸ 유튜브 계정 연결에서 다시 연결하세요."
-    return YouTubeError(friendly or f"YouTube API 오류 {status}: {reason or msg}")
+        friendly = tr("로그인이 만료되었습니다. 설정 ▸ 유튜브 계정 연결에서 다시 연결하세요.")
+    return YouTubeError(friendly or tr("YouTube API 오류 {0}: {1}").format(status, reason or msg))
 
 
 # --------------------------------------------------------------------------- OAuth
@@ -199,8 +200,8 @@ class _CodeHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         ok = "code" in q
         self.wfile.write(("<html><body style='font-family:sans-serif;text-align:center;padding:40px'>"
-                          + ("<h2>ClipSlicer 연결 완료</h2><p>이 창을 닫고 프로그램으로 돌아가세요.</p>" if ok
-                             else "<h2>연결이 취소되었습니다</h2>")
+                          + (tr("<h2>ClipSlicer 연결 완료</h2><p>이 창을 닫고 프로그램으로 돌아가세요.</p>") if ok
+                             else tr("<h2>연결이 취소되었습니다</h2>"))
                           + "</body></html>").encode("utf-8"))
 
     def log_message(self, *args):
@@ -234,19 +235,19 @@ def authorize(open_browser: Callable[[str], None] | None = None, timeout: int = 
     server.server_close()
     res = _CodeHandler.result
     if not res.get("code"):
-        raise YouTubeError("로그인이 완료되지 않았습니다" + (f" ({res['error']})" if res.get("error") else ""))
+        raise YouTubeError(tr("로그인이 완료되지 않았습니다") + (f" ({res['error']})" if res.get("error") else ""))
     if res.get("state") != state:
-        raise YouTubeError("로그인 응답이 올바르지 않습니다 (state 불일치)")
+        raise YouTubeError(tr("로그인 응답이 올바르지 않습니다 (state 불일치)"))
     data = urllib.parse.urlencode({
         "code": res["code"], "client_id": client["client_id"], "client_secret": client["client_secret"],
         "redirect_uri": redirect, "grant_type": "authorization_code", "code_verifier": verifier,
     }).encode()
     status, _h, body = _request("POST", TOKEN_URL, data, {"Content-Type": "application/x-www-form-urlencoded"})
     if status != 200:
-        raise YouTubeError("토큰 발급 실패: " + body[:300].decode("utf-8", "replace"))
+        raise YouTubeError(tr("토큰 발급 실패: ") + body[:300].decode("utf-8", "replace"))
     tok = json.loads(body)
     if "refresh_token" not in tok:
-        raise YouTubeError("refresh_token 이 없습니다. 구글 계정의 서드파티 액세스에서 ClipSlicer 를 제거한 뒤 다시 연결하세요.")
+        raise YouTubeError(tr("refresh_token 이 없습니다. 구글 계정의 서드파티 액세스에서 ClipSlicer 를 제거한 뒤 다시 연결하세요."))
     tok["expires_at"] = time.time() + int(tok.get("expires_in", 3600)) - 60
     save_token(tok)
     return tok
@@ -255,7 +256,7 @@ def authorize(open_browser: Callable[[str], None] | None = None, timeout: int = 
 def access_token() -> str:
     tok = load_token()
     if not tok:
-        raise YouTubeError("유튜브 계정이 연결되어 있지 않습니다. 설정 ▸ 유튜브 계정 연결.")
+        raise YouTubeError(tr("유튜브 계정이 연결되어 있지 않습니다. 설정 ▸ 유튜브 계정 연결."))
     if time.time() < tok.get("expires_at", 0) and tok.get("access_token"):
         return tok["access_token"]
     client = load_client()
@@ -265,7 +266,7 @@ def access_token() -> str:
     }).encode()
     status, _h, body = _request("POST", TOKEN_URL, data, {"Content-Type": "application/x-www-form-urlencoded"})
     if status != 200:
-        raise YouTubeError("로그인 갱신 실패. 설정 ▸ 유튜브 계정 연결에서 다시 연결하세요.")
+        raise YouTubeError(tr("로그인 갱신 실패. 설정 ▸ 유튜브 계정 연결에서 다시 연결하세요."))
     new = json.loads(body)
     tok["access_token"] = new["access_token"]
     tok["expires_at"] = time.time() + int(new.get("expires_in", 3600)) - 60
@@ -305,7 +306,7 @@ def my_channel() -> dict:
     j = _get("channels", {"part": "snippet", "mine": "true"})
     items = j.get("items") or []
     if not items:
-        raise YouTubeError("이 구글 계정에는 유튜브 채널이 없습니다.")
+        raise YouTubeError(tr("이 구글 계정에는 유튜브 채널이 없습니다."))
     sn = items[0]["snippet"]
     return {"id": items[0]["id"], "title": sn.get("title", ""), "thumbnail": (sn.get("thumbnails") or {}).get("default", {}).get("url", "")}
 
@@ -372,13 +373,13 @@ def upload_video(path: str, metadata: dict, on_progress: Callable[[float, str], 
         raise _api_error(status, body)
     session = headers.get("Location") or headers.get("location")
     if not session:
-        raise YouTubeError("업로드 세션을 시작하지 못했습니다")
+        raise YouTubeError(tr("업로드 세션을 시작하지 못했습니다"))
     offset = 0
     retries = 0
     with open(path, "rb") as f:
         while offset < total:
             if cancel and cancel():
-                raise YouTubeError("취소됨")
+                raise YouTubeError(tr("취소됨"))
             f.seek(offset)
             chunk = f.read(CHUNK)
             hdr = {"Authorization": "Bearer " + access_token(), "Content-Type": ctype,
@@ -388,7 +389,7 @@ def upload_video(path: str, metadata: dict, on_progress: Callable[[float, str], 
             except (urllib.error.URLError, OSError, TimeoutError) as ex:
                 retries += 1
                 if retries > 5:
-                    raise YouTubeError(f"네트워크 오류로 업로드 실패: {ex}")
+                    raise YouTubeError(tr("네트워크 오류로 업로드 실패: {0}").format(ex))
                 time.sleep(min(2 ** retries, 30))
                 offset = _query_offset(session, total)
                 continue
@@ -399,7 +400,7 @@ def upload_video(path: str, metadata: dict, on_progress: Callable[[float, str], 
             elif status in (200, 201):
                 vid = json.loads(body).get("id")
                 if on_progress:
-                    on_progress(1.0, "완료")
+                    on_progress(1.0, tr("완료"))
                 return vid
             elif status in (500, 502, 503, 504):
                 retries += 1
@@ -412,7 +413,7 @@ def upload_video(path: str, metadata: dict, on_progress: Callable[[float, str], 
                 raise _api_error(status, body)
             if on_progress:
                 on_progress(offset / total, f"{offset / 1e6:.0f} / {total / 1e6:.0f} MB")
-    raise YouTubeError("업로드가 끝났지만 응답이 없습니다")
+    raise YouTubeError(tr("업로드가 끝났지만 응답이 없습니다"))
 
 
 def _query_offset(session: str, total: int) -> int:
@@ -454,15 +455,15 @@ def check_upload(path: str, duration: float, size: int, shorts: bool = False) ->
     name = os.path.basename(path)
     errors, warns = [], []
     if duration > MAX_DURATION:
-        errors.append(f"{name}: 길이 {duration / 3600:.1f}시간 — 유튜브는 12시간까지만 올릴 수 있습니다. ClipSlicer 에서 나눠서 올리세요.")
+        errors.append(tr("{0}: 길이 {1:.1f}시간 — 유튜브는 12시간까지만 올릴 수 있습니다. ClipSlicer 에서 나눠서 올리세요.").format(name, duration / 3600))
     if size > MAX_SIZE:
-        errors.append(f"{name}: 크기 {size / 1024 ** 3:.0f} GB — 유튜브는 256 GB 까지입니다.")
+        errors.append(tr("{0}: 크기 {1:.0f} GB — 유튜브는 256 GB 까지입니다.").format(name, size / 1024 ** 3))
     if size <= 0:
-        errors.append(f"{name}: 비어 있는 파일입니다.")
+        errors.append(tr("{0}: 비어 있는 파일입니다.").format(name))
     if shorts and duration > SHORTS_MAX:
-        warns.append(f"{name}: {duration / 60:.1f}분 — 쇼츠는 3분까지라 일반 영상으로 올라갑니다.")
+        warns.append(tr("{0}: {1:.1f}분 — 쇼츠는 3분까지라 일반 영상으로 올라갑니다.").format(name, duration / 60))
     if duration > 15 * 60:
-        warns.append(f"{name}: 15분을 넘는 영상은 채널이 전화 인증되어 있어야 올라갑니다.")
+        warns.append(tr("{0}: 15분을 넘는 영상은 채널이 전화 인증되어 있어야 올라갑니다.").format(name))
     return errors, warns
 
 

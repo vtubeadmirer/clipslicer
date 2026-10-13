@@ -1,6 +1,7 @@
 """메인 창."""
 from __future__ import annotations
 
+from .i18n import tr
 import os
 import subprocess
 
@@ -19,6 +20,7 @@ import logging
 from .paths import make_settings
 from .logging_setup import log_dir
 from . import updater
+from . import i18n
 from . import youtube as yt
 from .youtube_ui import ConnectDialog, UploadDialog, make_items
 from .dialogs import SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, TimestampDialog, CropDialog, DownloadDialog, UpdateDialog
@@ -44,7 +46,7 @@ class TimeEdit(QLineEdit):
         self.setReadOnly(True)
         self.setFrame(False)
         self.setCursor(Qt.IBeamCursor)
-        self.setToolTip("클릭해서 시각 입력 (예: 1:23.5, 01:02:03, 83.5, 1h2m3s)")
+        self.setToolTip(tr("클릭해서 시각 입력 (예: 1:23.5, 01:02:03, 83.5, 1h2m3s)"))
         self.setFixedWidth(190)
         self.setStyleSheet("font-family: Consolas, monospace; font-size: 13px; background: transparent;")
         self._pos = 0.0
@@ -100,12 +102,7 @@ class DropLabel(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setCursor(Qt.PointingHandCursor)
         self.setText(
-            "<div style='color:#9aa0a6; font-size:15px; line-height:1.8'>"
-            "<div style='font-size:46px'>🎬</div>"
-            "<b style='color:#dfe3e8; font-size:18px'>영상을 여기에 끌어다 놓으세요</b><br>"
-            "또는 클릭해서 파일 열기 (Ctrl+O)<br><br>"
-            "<span style='font-size:12px; color:#7d848c'>재생하다가 자를 지점에서 <b>S</b> &nbsp;·&nbsp; 내보내기 <b>Ctrl+E</b> &nbsp;·&nbsp; 도움말 <b>F1</b></span>"
-            "</div>")
+            tr("<div style='color:#9aa0a6; font-size:15px; line-height:1.8'><div style='font-size:46px'>🎬</div><b style='color:#dfe3e8; font-size:18px'>영상을 여기에 끌어다 놓으세요</b><br>또는 클릭해서 파일 열기 (Ctrl+O)<br><br><span style='font-size:12px; color:#7d848c'>재생하다가 자를 지점에서 <b>S</b> &nbsp;·&nbsp; 내보내기 <b>Ctrl+E</b> &nbsp;·&nbsp; 도움말 <b>F1</b></span></div>"))
         self.setStyleSheet("background: #0e0e11; border: 1px dashed #3a3a44; border-radius: 6px;")
 
     def mousePressEvent(self, e):
@@ -160,20 +157,20 @@ class MainWindow(QMainWindow):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(8, 8, 4, 8)
         lv.setSpacing(6)
-        title = QLabel("영상 목록")
+        title = QLabel(tr("영상 목록"))
         title.setObjectName("panelTitle")
         lv.addWidget(title)
         self.file_list = QListWidget()
         self.file_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.file_list.currentRowChanged.connect(self._on_file_selected)
-        self.file_list.setToolTip("클릭해서 전환 · Ctrl+↑/↓")
+        self.file_list.setToolTip(tr("클릭해서 전환 · Ctrl+↑/↓"))
         lv.addWidget(self.file_list, 1)
         fb = QHBoxLayout()
-        btn_add = QPushButton("＋ 추가")
-        btn_add.setToolTip("영상 열기 (Ctrl+O)")
+        btn_add = QPushButton(tr("＋ 추가"))
+        btn_add.setToolTip(tr("영상 열기 (Ctrl+O)"))
         btn_add.clicked.connect(self.open_files)
-        btn_rm = QPushButton("－ 제거")
-        btn_rm.setToolTip("목록에서 현재 영상 제거 (파일은 그대로)")
+        btn_rm = QPushButton(tr("－ 제거"))
+        btn_rm.setToolTip(tr("목록에서 현재 영상 제거 (파일은 그대로)"))
         btn_rm.clicked.connect(self.remove_current_file)
         for b in (btn_add, btn_rm):
             b.setFocusPolicy(Qt.NoFocus)
@@ -233,30 +230,30 @@ class MainWindow(QMainWindow):
             ctl.addWidget(b)
             return b
 
-        tb("⏮", "10초 뒤로 (Ctrl+←)", lambda: self.player.seek_relative(-10))
-        tb("◀◀", "1초 뒤로 (Shift+←)", lambda: self.player.seek_relative(-1))
-        tb("◀", "한 프레임 뒤로 (←)", lambda: self.player.frame_step(False))
-        self.btn_play = tb("▶", "재생/정지 (Space)", self.player.toggle_pause, big=True)
-        tb("▶", "한 프레임 앞으로 (→)", lambda: self.player.frame_step(True))
-        tb("▶▶", "1초 앞으로 (Shift+→)", lambda: self.player.seek_relative(1))
-        tb("⏭", "10초 앞으로 (Ctrl+→)", lambda: self.player.seek_relative(10))
+        tb("⏮", tr("10초 뒤로 (Ctrl+←)"), lambda: self.player.seek_relative(-10))
+        tb("◀◀", tr("1초 뒤로 (Shift+←)"), lambda: self.player.seek_relative(-1))
+        tb("◀", tr("한 프레임 뒤로 (←)"), lambda: self.player.frame_step(False))
+        self.btn_play = tb("▶", tr("재생/정지 (Space)"), self.player.toggle_pause, big=True)
+        tb("▶", tr("한 프레임 앞으로 (→)"), lambda: self.player.frame_step(True))
+        tb("▶▶", tr("1초 앞으로 (Shift+→)"), lambda: self.player.seek_relative(1))
+        tb("⏭", tr("10초 앞으로 (Ctrl+→)"), lambda: self.player.seek_relative(10))
         ctl.addSpacing(10)
 
-        self.btn_cut = QPushButton("✂  여기서 자르기")
+        self.btn_cut = QPushButton(tr("✂  여기서 자르기"))
         self.btn_cut.setObjectName("cutBtn")
-        self.btn_cut.setToolTip("현재 위치에 자르기 마커 (S)")
+        self.btn_cut.setToolTip(tr("현재 위치에 자르기 마커 (S)"))
         self.btn_cut.setFocusPolicy(Qt.NoFocus)
         self.btn_cut.clicked.connect(self.add_marker_here)
         ctl.addWidget(self.btn_cut)
-        self.btn_preview = QPushButton("↺ 앞뒤 2초")
+        self.btn_preview = QPushButton(tr("↺ 앞뒤 2초"))
         self.btn_preview.setCheckable(True)
-        self.btn_preview.setToolTip("현재 위치 앞뒤 2초를 반복 재생해서 자를 지점 확인 (R)")
+        self.btn_preview.setToolTip(tr("현재 위치 앞뒤 2초를 반복 재생해서 자를 지점 확인 (R)"))
         self.btn_preview.setFocusPolicy(Qt.NoFocus)
         self.btn_preview.clicked.connect(self._on_preview_button)
         ctl.addWidget(self.btn_preview)
-        self.btn_loop = QPushButton("🔁 구간 반복")
+        self.btn_loop = QPushButton(tr("🔁 구간 반복"))
         self.btn_loop.setCheckable(True)
-        self.btn_loop.setToolTip("현재 구간 반복 재생 (L) · 타임라인 더블클릭")
+        self.btn_loop.setToolTip(tr("현재 구간 반복 재생 (L) · 타임라인 더블클릭"))
         self.btn_loop.setFocusPolicy(Qt.NoFocus)
         self.btn_loop.clicked.connect(self._on_loop_button)
         ctl.addWidget(self.btn_loop)
@@ -266,7 +263,7 @@ class MainWindow(QMainWindow):
         for s in SPEEDS:
             self.cb_speed.addItem(f"{s:g}x", s)
         self.cb_speed.setCurrentIndex(SPEEDS.index(1.0))
-        self.cb_speed.setToolTip("재생 속도 ([ 느리게 · ] 빠르게 · \\ 1배속)")
+        self.cb_speed.setToolTip(tr("재생 속도 ([ 느리게 · ] 빠르게 · \\ 1배속)"))
         self.cb_speed.setFocusPolicy(Qt.NoFocus)
         self.cb_speed.currentIndexChanged.connect(lambda i: self.player.set_speed(self.cb_speed.itemData(i)))
         ctl.addWidget(self.cb_speed)
@@ -274,7 +271,7 @@ class MainWindow(QMainWindow):
         self.btn_mute.setText("🔊")
         self.btn_mute.setCheckable(True)
         self.btn_mute.setAutoRaise(True)
-        self.btn_mute.setToolTip("음소거 (M)")
+        self.btn_mute.setToolTip(tr("음소거 (M)"))
         self.btn_mute.setFocusPolicy(Qt.NoFocus)
         self.btn_mute.toggled.connect(self._on_mute)
         ctl.addWidget(self.btn_mute)
@@ -282,13 +279,13 @@ class MainWindow(QMainWindow):
         self.sl_volume.setRange(0, 100)
         self.sl_volume.setValue(100)
         self.sl_volume.setFixedWidth(90)
-        self.sl_volume.setToolTip("볼륨")
+        self.sl_volume.setToolTip(tr("볼륨"))
         self.sl_volume.setFocusPolicy(Qt.NoFocus)
         self.sl_volume.valueChanged.connect(self.player.set_volume)
         ctl.addWidget(self.sl_volume)
         cv.addLayout(ctl)
 
-        hint = QLabel("타임라인: 클릭 이동 · 우클릭 마커 추가/삭제 · 마커 드래그 · Ctrl+클릭 구간 켜기/끄기 · 더블클릭 구간 반복 · Ctrl+휠 확대")
+        hint = QLabel(tr("타임라인: 클릭 이동 · 우클릭 마커 추가/삭제 · 마커 드래그 · Ctrl+클릭 구간 켜기/끄기 · 더블클릭 구간 반복 · Ctrl+휠 확대"))
         hint.setObjectName("hint")
         cv.addWidget(hint)
         root.addWidget(center)
@@ -299,29 +296,29 @@ class MainWindow(QMainWindow):
         rv.setContentsMargins(4, 8, 8, 8)
         rv.setSpacing(6)
         head = QHBoxLayout()
-        t2 = QLabel("구간 목록")
+        t2 = QLabel(tr("구간 목록"))
         t2.setObjectName("panelTitle")
         head.addWidget(t2)
         head.addStretch(1)
-        btn_silence = QPushButton("무음 자동 마커")
-        btn_silence.setToolTip("조용한 구간에 마커를 자동으로 찍습니다 (Ctrl+Shift+M)")
+        btn_silence = QPushButton(tr("무음 자동 마커"))
+        btn_silence.setToolTip(tr("조용한 구간에 마커를 자동으로 찍습니다 (Ctrl+Shift+M)"))
         btn_silence.setFocusPolicy(Qt.NoFocus)
         btn_silence.clicked.connect(self.auto_markers_silence)
         head.addWidget(btn_silence)
-        btn_chap = QPushButton("챕터 복사")
-        btn_chap.setToolTip("켜진 구간을 '00:00 이름' 목록으로 클립보드에 복사 (유튜브 설명란용)")
+        btn_chap = QPushButton(tr("챕터 복사"))
+        btn_chap.setToolTip(tr("켜진 구간을 '00:00 이름' 목록으로 클립보드에 복사 (유튜브 설명란용)"))
         btn_chap.setFocusPolicy(Qt.NoFocus)
         btn_chap.clicked.connect(self.copy_chapters)
         head.addWidget(btn_chap)
-        btn_clear = QPushButton("모두 지우기")
-        btn_clear.setToolTip("이 영상의 마커를 전부 삭제 (실행 취소 가능)")
+        btn_clear = QPushButton(tr("모두 지우기"))
+        btn_clear.setToolTip(tr("이 영상의 마커를 전부 삭제 (실행 취소 가능)"))
         btn_clear.setFocusPolicy(Qt.NoFocus)
         btn_clear.clicked.connect(self.clear_markers)
         head.addWidget(btn_clear)
         rv.addLayout(head)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["사용", "#", "시작", "끝", "길이", "파일명"])
+        self.table.setHorizontalHeaderLabels([tr("사용"), "#", tr("시작"), tr("끝"), tr("길이"), tr("파일명")])
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_NAME, QHeaderView.Stretch)
@@ -330,83 +327,81 @@ class MainWindow(QMainWindow):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
         self.table.setFocusPolicy(Qt.ClickFocus)
-        self.table.setToolTip("클릭: 구간 시작으로 이동 · 더블클릭(파일명): 이름 변경 · 더블클릭(그 외): 반복 재생")
+        self.table.setToolTip(tr("클릭: 구간 시작으로 이동 · 더블클릭(파일명): 이름 변경 · 더블클릭(그 외): 반복 재생"))
         self.table.itemChanged.connect(self._on_table_item_changed)
         self.table.cellClicked.connect(self._on_table_cell_clicked)
         self.table.cellDoubleClicked.connect(self._on_table_cell_double_clicked)
         rv.addWidget(self.table, 1)
 
-        grp = QGroupBox("내보내기")
+        grp = QGroupBox(tr("내보내기"))
         gv = QVBoxLayout(grp)
         gv.setSpacing(6)
         outrow = QHBoxLayout()
         self.ed_outdir = QLineEdit()
-        self.ed_outdir.setPlaceholderText("비워 두면 원본 옆 '<이름>_cuts' 폴더")
+        self.ed_outdir.setPlaceholderText(tr("비워 두면 원본 옆 '<이름>_cuts' 폴더"))
         btn_out = QToolButton()
         btn_out.setText("…")
-        btn_out.setToolTip("출력 폴더 선택")
+        btn_out.setToolTip(tr("출력 폴더 선택"))
         btn_out.clicked.connect(self.choose_outdir)
-        outrow.addWidget(QLabel("폴더"))
+        outrow.addWidget(QLabel(tr("폴더")))
         outrow.addWidget(self.ed_outdir, 1)
         outrow.addWidget(btn_out)
         gv.addLayout(outrow)
 
         moderow = QHBoxLayout()
-        moderow.addWidget(QLabel("방식"))
+        moderow.addWidget(QLabel(tr("방식")))
         self.cb_mode = QComboBox()
-        self.cb_mode.addItem("빠르게 — 원본 그대로 잘라내기 (즉시, 기본)", "fast")
-        self.cb_mode.addItem("스마트 — 시작점 정확 (앞 1~2초만 재인코딩)", "smart")
-        self.cb_mode.addItem("정확하게 — 전체 재인코딩 (느림)", "precise")
+        self.cb_mode.addItem(tr("빠르게 — 원본 그대로 잘라내기 (즉시, 기본)"), "fast")
+        self.cb_mode.addItem(tr("스마트 — 시작점 정확 (앞 1~2초만 재인코딩)"), "smart")
+        self.cb_mode.addItem(tr("정확하게 — 전체 재인코딩 (느림)"), "precise")
         self.cb_mode.setToolTip(
-            "빠르게: 재인코딩 없이 복사. 시작점이 바로 앞 키프레임까지(보통 1~2초) 당겨질 수 있음.\n"
-            "스마트: 시작~첫 키프레임만 재인코딩해서 시작점을 정확히 맞춤. 파일을 한 번 더 읽음.\n"
-            "정확하게: 전부 재인코딩. 어떤 영상이든 되지만 가장 느림.")
+            tr("빠르게: 재인코딩 없이 복사. 시작점이 바로 앞 키프레임까지(보통 1~2초) 당겨질 수 있음.\n스마트: 시작~첫 키프레임만 재인코딩해서 시작점을 정확히 맞춤. 파일을 한 번 더 읽음.\n정확하게: 전부 재인코딩. 어떤 영상이든 되지만 가장 느림."))
         self.cb_mode.setFocusPolicy(Qt.NoFocus)
         self.cb_mode.currentIndexChanged.connect(lambda _i: self._refresh_table())
         moderow.addWidget(self.cb_mode, 1)
         gv.addLayout(moderow)
 
         optrow = QHBoxLayout()
-        optrow.addWidget(QLabel("출력"))
+        optrow.addWidget(QLabel(tr("출력")))
         self.cb_audio = QComboBox()
-        self.cb_audio.addItem("영상 + 오디오", "")
-        self.cb_audio.addItem("오디오만 (m4a)", "aac")
-        self.cb_audio.addItem("오디오만 (mp3)", "mp3")
-        self.cb_audio.addItem("세로 9:16 쇼츠 (재인코딩)", "vertical")
+        self.cb_audio.addItem(tr("영상 + 오디오"), "")
+        self.cb_audio.addItem(tr("오디오만 (m4a)"), "aac")
+        self.cb_audio.addItem(tr("오디오만 (mp3)"), "mp3")
+        self.cb_audio.addItem(tr("세로 9:16 쇼츠 (재인코딩)"), "vertical")
         self.cb_audio.setFocusPolicy(Qt.NoFocus)
         self.cb_audio.currentIndexChanged.connect(self._on_output_changed)
         optrow.addWidget(self.cb_audio)
-        self.btn_crop = QPushButton("크롭 위치…")
-        self.btn_crop.setToolTip("현재 화면에서 세로로 잘라낼 위치를 고릅니다")
+        self.btn_crop = QPushButton(tr("크롭 위치…"))
+        self.btn_crop.setToolTip(tr("현재 화면에서 세로로 잘라낼 위치를 고릅니다"))
         self.btn_crop.setFocusPolicy(Qt.NoFocus)
         self.btn_crop.clicked.connect(self.choose_crop)
         self.btn_crop.hide()
         optrow.addWidget(self.btn_crop)
-        self.cb_merge = QCheckBox("하나로 합치기")
-        self.cb_merge.setToolTip("켜진 구간들을 각각 저장하지 않고 순서대로 이어 붙여 파일 하나로 만듭니다")
+        self.cb_merge = QCheckBox(tr("하나로 합치기"))
+        self.cb_merge.setToolTip(tr("켜진 구간들을 각각 저장하지 않고 순서대로 이어 붙여 파일 하나로 만듭니다"))
         self.cb_merge.setFocusPolicy(Qt.NoFocus)
         self.cb_merge.toggled.connect(lambda _c: self._refresh_table())
         optrow.addWidget(self.cb_merge)
-        self.cb_open = QCheckBox("완료 후 폴더 열기")
+        self.cb_open = QCheckBox(tr("완료 후 폴더 열기"))
         self.cb_open.setChecked(True)
         self.cb_open.setFocusPolicy(Qt.NoFocus)
         optrow.addWidget(self.cb_open)
-        self.cb_youtube = QCheckBox("완료 후 유튜브에 올리기")
-        self.cb_youtube.setToolTip("내보내기가 끝나면 잘린 파일들을 유튜브(비공개)에 올리는 창을 엽니다. 설정 ▸ 유튜브 계정 연결 필요")
+        self.cb_youtube = QCheckBox(tr("완료 후 유튜브에 올리기"))
+        self.cb_youtube.setToolTip(tr("내보내기가 끝나면 잘린 파일들을 유튜브(비공개)에 올리는 창을 엽니다. 설정 ▸ 유튜브 계정 연결 필요"))
         self.cb_youtube.setFocusPolicy(Qt.NoFocus)
         optrow.addWidget(self.cb_youtube)
         optrow.addStretch(1)
         gv.addLayout(optrow)
 
         btnrow = QHBoxLayout()
-        self.btn_export_cur = QPushButton("현재 영상")
-        self.btn_export_cur.setToolTip("현재 영상의 켜진 구간만 내보내기 (Ctrl+Shift+E)")
+        self.btn_export_cur = QPushButton(tr("현재 영상"))
+        self.btn_export_cur.setToolTip(tr("현재 영상의 켜진 구간만 내보내기 (Ctrl+Shift+E)"))
         self.btn_export_cur.clicked.connect(lambda: self.start_export(all_files=False))
-        self.btn_export_all = QPushButton("모든 영상 내보내기")
+        self.btn_export_all = QPushButton(tr("모든 영상 내보내기"))
         self.btn_export_all.setObjectName("exportBtn")
-        self.btn_export_all.setToolTip("목록의 모든 영상을 내보내기 (Ctrl+E)")
+        self.btn_export_all.setToolTip(tr("목록의 모든 영상을 내보내기 (Ctrl+E)"))
         self.btn_export_all.clicked.connect(lambda: self.start_export(all_files=True))
-        self.btn_cancel = QPushButton("취소")
+        self.btn_cancel = QPushButton(tr("취소"))
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self.cancel_export)
         for b in (self.btn_export_cur, self.btn_export_all, self.btn_cancel):
@@ -422,7 +417,7 @@ class MainWindow(QMainWindow):
         self.log.setReadOnly(True)
         self.log.setMaximumHeight(120)
         self.log.setObjectName("log")
-        self.log.setPlaceholderText("내보내기 결과가 여기에 표시됩니다")
+        self.log.setPlaceholderText(tr("내보내기 결과가 여기에 표시됩니다"))
         gv.addWidget(self.log)
         rv.addWidget(grp)
         root.addWidget(right)
@@ -436,171 +431,181 @@ class MainWindow(QMainWindow):
         # 상태 표시줄
         self.btn_update = QPushButton("")
         self.btn_update.setObjectName("updateBtn")
-        self.btn_update.setToolTip("새 버전 보기")
+        self.btn_update.setToolTip(tr("새 버전 보기"))
         self.btn_update.setFocusPolicy(Qt.NoFocus)
         self.btn_update.clicked.connect(self.show_update_dialog)
         self.btn_update.hide()
         self.statusBar().addPermanentWidget(self.btn_update)
         self.lbl_zoom = QLabel("")
-        self.lbl_gpu = QLabel("GPU 확인 중…")
+        self.lbl_gpu = QLabel(tr("GPU 확인 중…"))
         self.lbl_saved = QLabel("")
         for w in (self.lbl_zoom, self.lbl_gpu, self.lbl_saved):
             w.setObjectName("statusChip")
             self.statusBar().addPermanentWidget(w)
-        self.statusBar().showMessage("영상을 끌어다 놓거나 Ctrl+O 로 열어 주세요")
+        self.statusBar().showMessage(tr("영상을 끌어다 놓거나 Ctrl+O 로 열어 주세요"))
 
     def _build_menus(self):
         mb = self.menuBar()
 
-        m_file = mb.addMenu("파일(&F)")
-        a = QAction("영상 열기…", self)
+        m_file = mb.addMenu(tr("파일(&F)"))
+        a = QAction(tr("영상 열기…"), self)
         a.setShortcut(QKeySequence.Open)
         a.triggered.connect(self.open_files)
         m_file.addAction(a)
-        a = QAction("URL 에서 열기… (yt-dlp)", self)
+        a = QAction(tr("URL 에서 열기… (yt-dlp)"), self)
         a.setShortcut("Ctrl+L")
         a.triggered.connect(self.open_url)
         m_file.addAction(a)
-        self.menu_recent = QMenu("최근 파일", self)
+        self.menu_recent = QMenu(tr("최근 파일"), self)
         m_file.addMenu(self.menu_recent)
         m_file.addSeparator()
-        a = QAction("현재 화면을 PNG 로 저장", self)
+        a = QAction(tr("현재 화면을 PNG 로 저장"), self)
         a.setShortcut("Ctrl+P")
         a.triggered.connect(self.save_screenshot)
         m_file.addAction(a)
         m_file.addSeparator()
-        a = QAction("유튜브에 올리기… (파일 선택)", self)
+        a = QAction(tr("유튜브에 올리기… (파일 선택)"), self)
         a.setShortcut("Ctrl+U")
         a.triggered.connect(self.upload_files_to_youtube)
         m_file.addAction(a)
         m_file.addSeparator()
-        a = QAction("현재 영상 내보내기", self)
+        a = QAction(tr("현재 영상 내보내기"), self)
         a.setShortcut("Ctrl+Shift+E")
         a.triggered.connect(lambda: self.start_export(all_files=False))
         m_file.addAction(a)
-        a = QAction("모든 영상 내보내기", self)
+        a = QAction(tr("모든 영상 내보내기"), self)
         a.setShortcut("Ctrl+E")
         a.triggered.connect(lambda: self.start_export(all_files=True))
         m_file.addAction(a)
         m_file.addSeparator()
-        a = QAction("종료", self)
+        a = QAction(tr("종료"), self)
         a.triggered.connect(self.close)
         m_file.addAction(a)
 
-        m_edit = mb.addMenu("편집(&E)")
-        self.act_undo = QAction("실행 취소", self)
+        m_edit = mb.addMenu(tr("편집(&E)"))
+        self.act_undo = QAction(tr("실행 취소"), self)
         self.act_undo.setShortcut(QKeySequence.Undo)
         self.act_undo.triggered.connect(self.undo)
-        self.act_redo = QAction("다시 실행", self)
+        self.act_redo = QAction(tr("다시 실행"), self)
         self.act_redo.setShortcut("Ctrl+Y")
         self.act_redo.triggered.connect(self.redo)
         m_edit.addActions([self.act_undo, self.act_redo])
         m_edit.addSeparator()
-        a = QAction("현재 위치에 마커", self)
+        a = QAction(tr("현재 위치에 마커"), self)
         a.setShortcut("S")
         a.triggered.connect(self.add_marker_here)
         m_edit.addAction(a)
-        a = QAction("가까운 마커 삭제", self)
+        a = QAction(tr("가까운 마커 삭제"), self)
         a.setShortcut("Delete")
         a.triggered.connect(self.delete_nearest_marker)
         m_edit.addAction(a)
-        a = QAction("현재 구간 켜기/끄기", self)
+        a = QAction(tr("현재 구간 켜기/끄기"), self)
         a.setShortcut("E")
         a.triggered.connect(self.toggle_current_segment)
         m_edit.addAction(a)
         m_edit.addSeparator()
-        a = QAction("클립 시작 (In)", self)
+        a = QAction(tr("클립 시작 (In)"), self)
         a.setShortcut("I")
         a.triggered.connect(self.clip_in)
         m_edit.addAction(a)
-        a = QAction("클립 끝 (Out) — 사이만 켜기", self)
+        a = QAction(tr("클립 끝 (Out) — 사이만 켜기"), self)
         a.setShortcut("O")
         a.triggered.connect(self.clip_out)
         m_edit.addAction(a)
-        a = QAction("마커 모두 지우기", self)
+        a = QAction(tr("마커 모두 지우기"), self)
         a.triggered.connect(self.clear_markers)
         m_edit.addAction(a)
         m_edit.addSeparator()
-        a = QAction("무음 구간에 자동 마커…", self)
+        a = QAction(tr("무음 구간에 자동 마커…"), self)
         a.setShortcut("Ctrl+Shift+M")
         a.triggered.connect(self.auto_markers_silence)
         m_edit.addAction(a)
-        a = QAction("장면 전환에 자동 마커…", self)
+        a = QAction(tr("장면 전환에 자동 마커…"), self)
         a.setShortcut("Ctrl+Shift+S")
         a.triggered.connect(self.auto_markers_scene)
         m_edit.addAction(a)
-        a = QAction("타임스탬프 붙여넣기 → 마커…", self)
+        a = QAction(tr("타임스탬프 붙여넣기 → 마커…"), self)
         a.setShortcut("Ctrl+Shift+V")
         a.triggered.connect(self.paste_timestamps)
         m_edit.addAction(a)
 
-        m_view = mb.addMenu("보기(&V)")
-        a = QAction("확대", self)
+        m_view = mb.addMenu(tr("보기(&V)"))
+        a = QAction(tr("확대"), self)
         a.setShortcut("Ctrl+=")
         a.triggered.connect(lambda: self.timeline.canvas.zoom(1.5))
         m_view.addAction(a)
-        a = QAction("축소", self)
+        a = QAction(tr("축소"), self)
         a.setShortcut("Ctrl+-")
         a.triggered.connect(lambda: self.timeline.canvas.zoom(1 / 1.5))
         m_view.addAction(a)
-        a = QAction("전체 보기", self)
+        a = QAction(tr("전체 보기"), self)
         a.setShortcut("Ctrl+0")
         a.triggered.connect(self.timeline.canvas.zoom_reset)
         m_view.addAction(a)
         m_view.addSeparator()
-        self.act_keyframes = QAction("키프레임 표시", self, checkable=True, checked=True)
+        self.act_keyframes = QAction(tr("키프레임 표시"), self, checkable=True, checked=True)
         self.act_keyframes.toggled.connect(self._on_toggle_keyframes)
         m_view.addAction(self.act_keyframes)
 
-        m_set = mb.addMenu("설정(&S)")
-        self.act_snap = QAction("마커를 키프레임에 맞추기", self, checkable=True)
-        self.act_snap.setToolTip("마커를 찍을 때 0.5초 안에 키프레임이 있으면 거기에 붙입니다")
+        m_set = mb.addMenu(tr("설정(&S)"))
+        self.act_snap = QAction(tr("마커를 키프레임에 맞추기"), self, checkable=True)
+        self.act_snap.setToolTip(tr("마커를 찍을 때 0.5초 안에 키프레임이 있으면 거기에 붙입니다"))
         m_set.addAction(self.act_snap)
-        self.act_gpu = QAction("GPU 인코딩 사용", self, checkable=True, checked=True)
+        self.act_gpu = QAction(tr("GPU 인코딩 사용"), self, checkable=True, checked=True)
         m_set.addAction(self.act_gpu)
-        self.act_autosave = QAction("작업 자동 저장 (.clipslicer.json)", self, checkable=True, checked=True)
+        self.act_autosave = QAction(tr("작업 자동 저장 (.clipslicer.json)"), self, checkable=True, checked=True)
         m_set.addAction(self.act_autosave)
-        self.act_cache = QAction("분석 결과 캐시 저장 (.clipslicer.cache)", self, checkable=True, checked=True)
-        self.act_cache.setToolTip("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다")
+        self.act_cache = QAction(tr("분석 결과 캐시 저장 (.clipslicer.cache)"), self, checkable=True, checked=True)
+        self.act_cache.setToolTip(tr("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다"))
         m_set.addAction(self.act_cache)
-        self.act_update = QAction("시작할 때 새 버전 확인 (GitHub 조회)", self, checkable=True, checked=True)
+        self.act_update = QAction(tr("시작할 때 새 버전 확인 (GitHub 조회)"), self, checkable=True, checked=True)
         m_set.addAction(self.act_update)
-        self.act_compat = QAction("호환 모드 — 화면이 검게 나올 때 (재시작 필요)", self, checkable=True)
+        self.act_compat = QAction(tr("호환 모드 — 화면이 검게 나올 때 (재시작 필요)"), self, checkable=True)
         self.act_compat.setChecked(self.settings.value("compat_mode", "0") == "1")
         self.act_compat.toggled.connect(self._on_compat_toggled)
         m_set.addAction(self.act_compat)
         m_set.addSeparator()
-        a = QAction("유튜브 계정 연결…", self)
+        m_lang = QMenu(tr("언어 / Language"), self)
+        self.lang_actions = []
+        cur = self.settings.value("lang", "auto")
+        for code, label in i18n.LANGUAGES:
+            a = QAction(tr(label), self, checkable=True, checked=(code == cur))
+            a.triggered.connect(lambda _c=False, code=code: self._set_language(code))
+            m_lang.addAction(a)
+            self.lang_actions.append((code, a))
+        m_set.addMenu(m_lang)
+        m_set.addSeparator()
+        a = QAction(tr("유튜브 계정 연결…"), self)
         a.triggered.connect(lambda: ConnectDialog(self).exec())
         m_set.addAction(a)
-        a = QAction("유튜브 설명 템플릿…", self)
+        a = QAction(tr("유튜브 설명 템플릿…"), self)
         a.triggered.connect(self.edit_yt_template)
         m_set.addAction(a)
         m_set.addSeparator()
-        a = QAction("파일명 규칙…", self)
+        a = QAction(tr("파일명 규칙…"), self)
         a.triggered.connect(self.edit_pattern)
         m_set.addAction(a)
 
-        m_help = mb.addMenu("도움말(&H)")
-        a = QAction("도움말", self)
+        m_help = mb.addMenu(tr("도움말(&H)"))
+        a = QAction(tr("도움말"), self)
         a.setShortcut("F1")
         a.triggered.connect(lambda: self.show_help(0))
         m_help.addAction(a)
-        a = QAction("단축키", self)
+        a = QAction(tr("단축키"), self)
         a.triggered.connect(lambda: self.show_help(1))
         m_help.addAction(a)
-        a = QAction("자르기 모드 설명", self)
+        a = QAction(tr("자르기 모드 설명"), self)
         a.triggered.connect(lambda: self.show_help(3))
         m_help.addAction(a)
         m_help.addSeparator()
-        a = QAction("GitHub 저장소 열기", self)
+        a = QAction(tr("GitHub 저장소 열기"), self)
         a.triggered.connect(lambda: os.startfile("https://github.com/vtubeadmirer/clipslicer"))
         m_help.addAction(a)
-        a = QAction("로그 폴더 열기", self)
+        a = QAction(tr("로그 폴더 열기"), self)
         a.triggered.connect(lambda: os.startfile(log_dir()))
         m_help.addAction(a)
         m_help.addSeparator()
-        a = QAction("업데이트 확인…", self)
+        a = QAction(tr("업데이트 확인…"), self)
         a.triggered.connect(lambda: self.check_updates(manual=True))
         m_help.addAction(a)
         self._rebuild_recent_menu()
@@ -698,7 +703,7 @@ class MainWindow(QMainWindow):
         self.menu_recent.clear()
         rec = self._recent()
         if not rec:
-            a = QAction("(없음)", self)
+            a = QAction(tr("(없음)"), self)
             a.setEnabled(False)
             self.menu_recent.addAction(a)
             return
@@ -708,16 +713,23 @@ class MainWindow(QMainWindow):
             a.triggered.connect(lambda _c=False, p=p: self.add_files([p]))
             self.menu_recent.addAction(a)
         self.menu_recent.addSeparator()
-        a = QAction("목록 지우기", self)
+        a = QAction(tr("목록 지우기"), self)
         a.triggered.connect(lambda: (self.settings.setValue("recent", []), self._rebuild_recent_menu()))
         self.menu_recent.addAction(a)
+
+    def _set_language(self, code: str):
+        for c, a in self.lang_actions:
+            a.setChecked(c == code)
+        self.settings.setValue("lang", code)
+        self.settings.sync()
+        QMessageBox.information(self, tr("언어 / Language"), tr("언어는 다음 실행부터 적용됩니다.") + "\nThe language changes the next time the app starts.")
 
     def _on_compat_toggled(self, on: bool):
         self.settings.setValue("compat_mode", "1" if on else "0")
         self.settings.sync()
-        QMessageBox.information(self, "호환 모드", "다음 실행부터 적용됩니다.\n"
-                                + ("GPU 가속 없이 화면을 그립니다. 원격 데스크톱·가상머신·구형 그래픽에서 화면이 검게 나올 때 쓰세요."
-                                   if on else "GPU 가속 재생으로 돌아갑니다."))
+        QMessageBox.information(self, tr("호환 모드"), tr("다음 실행부터 적용됩니다.\n")
+                                + (tr("GPU 가속 없이 화면을 그립니다. 원격 데스크톱·가상머신·구형 그래픽에서 화면이 검게 나올 때 쓰세요.")
+                                   if on else tr("GPU 가속 재생으로 돌아갑니다.")))
 
     def edit_pattern(self):
         d = PatternDialog(self, self.pattern)
@@ -735,10 +747,10 @@ class MainWindow(QMainWindow):
         LOG.info("GPU 인코더: %s", enc)
         if enc:
             self.lbl_gpu.setText(f"GPU: {enc}")
-            self.act_gpu.setText(f"GPU 인코딩 사용 ({enc})")
+            self.act_gpu.setText(tr("GPU 인코딩 사용 ({0})").format(enc))
         else:
-            self.lbl_gpu.setText("GPU 인코더 없음 (CPU)")
-            self.act_gpu.setText("GPU 인코딩 사용 (감지 안 됨)")
+            self.lbl_gpu.setText(tr("GPU 인코더 없음 (CPU)"))
+            self.act_gpu.setText(tr("GPU 인코딩 사용 (감지 안 됨)"))
             self.act_gpu.setEnabled(False)
 
     def _on_toggle_keyframes(self, on: bool):
@@ -747,11 +759,11 @@ class MainWindow(QMainWindow):
 
     def _update_zoom_label(self):
         z = self.timeline.canvas.zoom_factor()
-        self.lbl_zoom.setText("" if z <= 1.01 else f"확대 {z:.1f}x")
+        self.lbl_zoom.setText("" if z <= 1.01 else tr("확대 {0:.1f}x").format(z))
 
     def closeEvent(self, e):
         if self.export_worker and self.export_worker.isRunning():
-            if QMessageBox.question(self, "종료", "내보내기가 진행 중입니다. 취소하고 종료할까요?") != QMessageBox.Yes:
+            if QMessageBox.question(self, tr("종료"), tr("내보내기가 진행 중입니다. 취소하고 종료할까요?")) != QMessageBox.Yes:
                 e.ignore()
                 return
             self.export_worker.cancel()
@@ -780,7 +792,7 @@ class MainWindow(QMainWindow):
     def open_files(self):
         start = self.settings.value("last_dir", "")
         exts = " ".join(f"*{x}" for x in sorted(VIDEO_EXTS))
-        paths, _ = QFileDialog.getOpenFileNames(self, "영상 열기", start, f"영상 파일 ({exts});;모든 파일 (*.*)")
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("영상 열기"), start, tr("영상 파일 ({0});;모든 파일 (*.*)").format(exts))
         if paths:
             self.settings.setValue("last_dir", os.path.dirname(paths[0]))
             self.add_files(paths)
@@ -805,18 +817,18 @@ class MainWindow(QMainWindow):
         if path in self.projects:
             return path
         if not os.path.isfile(path):
-            self._log(f"파일 없음: {path}")
+            self._log(tr("파일 없음: {0}").format(path))
             return None
         try:
             info = ffmpeg_tools.probe(path)
         except Exception as ex:
             LOG.warning("열기 실패 %s: %s", path, ex)
-            self._log(f"열기 실패: {os.path.basename(path)} — {ex}")
+            self._log(tr("열기 실패: {0} — {1}").format(os.path.basename(path), ex))
             return None
         LOG.info("열기 %s | %sx%s %.2ffps %.1fs %s/%s", path, info["width"], info["height"], info["fps"],
                  info["duration"], info["vcodec"], info["acodec"])
         if info["duration"] <= 0:
-            self._log(f"길이를 알 수 없음: {os.path.basename(path)}")
+            self._log(tr("길이를 알 수 없음: {0}").format(os.path.basename(path)))
             return None
         proj = ClipProject(path=path, duration=info["duration"], fps=info["fps"],
                            width=info["width"], height=info["height"], info=info)
@@ -832,7 +844,7 @@ class MainWindow(QMainWindow):
         self._add_recent(path)
         self._start_analyze(proj)
         if restored:
-            self.statusBar().showMessage(f"{os.path.basename(path)}: 저장된 작업 복원 (마커 {len(proj.markers)}개)", 5000)
+            self.statusBar().showMessage(tr("{0}: 저장된 작업 복원 (마커 {1}개)").format(os.path.basename(path), len(proj.markers)), 5000)
         return path
 
     def _update_file_item(self, proj: ClipProject):
@@ -879,7 +891,7 @@ class MainWindow(QMainWindow):
                 self.timeline.canvas.update()
                 if len(kfs) > 1:
                     gap = proj.duration / len(kfs)
-                    self.statusBar().showMessage(f"키프레임 {len(kfs)}개, 평균 간격 {gap:.1f}초", 4000)
+                    self.statusBar().showMessage(tr("키프레임 {0}개, 평균 간격 {1:.1f}초").format(len(kfs), gap), 4000)
 
     def remove_current_file(self):
         row = self.file_list.currentRow()
@@ -967,7 +979,7 @@ class MainWindow(QMainWindow):
                 if proj.save():
                     n += 1
         if n:
-            self.lbl_saved.setText("자동 저장됨")
+            self.lbl_saved.setText(tr("자동 저장됨"))
             QTimer.singleShot(2500, lambda: self.lbl_saved.setText(""))
 
     # ------------------------------------------------------------ 재생 상태
@@ -999,7 +1011,7 @@ class MainWindow(QMainWindow):
     def _change_speed(self, d: int):
         i = max(0, min(len(SPEEDS) - 1, self.cb_speed.currentIndex() + d))
         self.cb_speed.setCurrentIndex(i)
-        self.statusBar().showMessage(f"재생 속도 {SPEEDS[i]:g}x", 1500)
+        self.statusBar().showMessage(tr("재생 속도 {0:g}x").format(SPEEDS[i]), 1500)
 
     def _snap(self, t: float) -> float:
         if not self.current:
@@ -1036,7 +1048,7 @@ class MainWindow(QMainWindow):
             self.current.redo_stack.clear()
             self._set_loop(-1)
             self._changed()
-            self.statusBar().showMessage(f"마커 추가: {fmt_time(t)}  (구간 {len(self.current.segments)}개)", 3000)
+            self.statusBar().showMessage(tr("마커 추가: {0}  (구간 {1}개)").format(fmt_time(t), len(self.current.segments)), 3000)
 
     def delete_nearest_marker(self):
         if not self.current or not self.current.markers:
@@ -1053,7 +1065,7 @@ class MainWindow(QMainWindow):
         self.current.remove_marker(idx)
         self._set_loop(-1)
         self._changed()
-        self.statusBar().showMessage(f"마커 삭제: {fmt_time(t)}", 3000)
+        self.statusBar().showMessage(tr("마커 삭제: {0}").format(fmt_time(t)), 3000)
 
     def _on_marker_drag_started(self):
         if self.current:
@@ -1077,7 +1089,7 @@ class MainWindow(QMainWindow):
         self.current.clear_markers()
         self._set_loop(-1)
         self._changed()
-        self.statusBar().showMessage("마커를 모두 지웠습니다 (Ctrl+Z 로 되돌리기)", 4000)
+        self.statusBar().showMessage(tr("마커를 모두 지웠습니다 (Ctrl+Z 로 되돌리기)"), 4000)
 
     def toggle_segment(self, idx: int):
         if not self.current or not (0 <= idx < len(self.current.segments)):
@@ -1095,13 +1107,13 @@ class MainWindow(QMainWindow):
         if self.current and self.current.undo():
             self._set_loop(-1)
             self._changed()
-            self.statusBar().showMessage("실행 취소", 1500)
+            self.statusBar().showMessage(tr("실행 취소"), 1500)
 
     def redo(self):
         if self.current and self.current.redo():
             self._set_loop(-1)
             self._changed()
-            self.statusBar().showMessage("다시 실행", 1500)
+            self.statusBar().showMessage(tr("다시 실행"), 1500)
 
     def _update_undo_actions(self):
         self.act_undo.setEnabled(bool(self.current and self.current.undo_stack))
@@ -1129,7 +1141,7 @@ class MainWindow(QMainWindow):
         if self.silence_worker and self.silence_worker.isRunning():
             return
         if not self.current.info.get("has_audio"):
-            QMessageBox.information(self, "무음 자동 마커", "이 영상에는 오디오가 없습니다.")
+            QMessageBox.information(self, tr("무음 자동 마커"), tr("이 영상에는 오디오가 없습니다."))
             return
         d = SilenceDialog(self, float(self.settings.value("silence_db", -35.0)),
                           float(self.settings.value("silence_dur", 1.0)))
@@ -1138,7 +1150,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("silence_db", d.noise_db)
         self.settings.setValue("silence_dur", d.min_dur)
         self._silence_mode = d.mode
-        self.statusBar().showMessage("무음 구간 분석 중…")
+        self.statusBar().showMessage(tr("무음 구간 분석 중…"))
         self.silence_worker = SilenceWorker(self.current.path, d.noise_db, d.min_dur, self)
         self.silence_worker.done.connect(self._on_silence_done)
         self.silence_worker.start()
@@ -1149,7 +1161,7 @@ class MainWindow(QMainWindow):
             return
         spans = [(a, min(b, proj.duration)) for a, b in spans if a < proj.duration]
         if not spans:
-            self.statusBar().showMessage("조건에 맞는 무음 구간이 없습니다. 기준 음량을 올려 보세요.", 5000)
+            self.statusBar().showMessage(tr("조건에 맞는 무음 구간이 없습니다. 기준 음량을 올려 보세요."), 5000)
             return
         proj.push_undo()
         if self._silence_mode == "edges":
@@ -1163,17 +1175,17 @@ class MainWindow(QMainWindow):
                         s.enabled = False
                     elif s.start >= a - 0.01 and s.end <= b + 0.01:
                         s.enabled = False
-            msg = f"무음 구간 {len(spans)}개를 찾아 마커 {n}개 추가, 무음 구간은 껐습니다"
+            msg = tr("무음 구간 {0}개를 찾아 마커 {1}개 추가, 무음 구간은 껐습니다").format(len(spans), n)
         else:
             n = proj.add_markers([(a + b) / 2 for a, b in spans])
-            msg = f"무음 구간 {len(spans)}개 가운데에 마커 {n}개 추가"
+            msg = tr("무음 구간 {0}개 가운데에 마커 {1}개 추가").format(len(spans), n)
         if proj is self.current:
             self._set_loop(-1)
             self._changed()
         else:
             proj.dirty = True
             self._schedule_save()
-        self.statusBar().showMessage(msg + " (Ctrl+Z 로 되돌리기)", 6000)
+        self.statusBar().showMessage(msg + tr(" (Ctrl+Z 로 되돌리기)"), 6000)
 
     # ---- 클립 모드 (I/O) ----
     def clip_in(self):
@@ -1181,14 +1193,14 @@ class MainWindow(QMainWindow):
             return
         self.current.pending_in = self._snap(self.player.position)
         self.timeline.canvas.update()
-        self.statusBar().showMessage(f"클립 시작 {fmt_time(self.current.pending_in)} — 끝 지점에서 O (Esc 취소)", 6000)
+        self.statusBar().showMessage(tr("클립 시작 {0} — 끝 지점에서 O (Esc 취소)").format(fmt_time(self.current.pending_in)), 6000)
 
     def clip_out(self):
         p = self.current
         if not p:
             return
         if p.pending_in is None:
-            self.statusBar().showMessage("먼저 I 로 클립 시작을 찍으세요", 3000)
+            self.statusBar().showMessage(tr("먼저 I 로 클립 시작을 찍으세요"), 3000)
             return
         b = self._snap(self.player.position)
         a = p.pending_in
@@ -1202,26 +1214,26 @@ class MainWindow(QMainWindow):
             self._set_loop(-1)
             self._changed()
             n = len(p.enabled_segments())
-            self.statusBar().showMessage(f"클립 {fmt_time(a)} ~ {fmt_time(b)} 추가 (켜진 구간 {n}개, 나머지는 꺼짐)", 6000)
+            self.statusBar().showMessage(tr("클립 {0} ~ {1} 추가 (켜진 구간 {2}개, 나머지는 꺼짐)").format(fmt_time(a), fmt_time(b), n), 6000)
         else:
             self.timeline.canvas.update()
-            self.statusBar().showMessage("클립이 너무 짧습니다 (0.1초 이상)", 3000)
+            self.statusBar().showMessage(tr("클립이 너무 짧습니다 (0.1초 이상)"), 3000)
 
     def clip_cancel(self):
         if self.current and self.current.pending_in is not None:
             self.current.pending_in = None
             self.timeline.canvas.update()
-            self.statusBar().showMessage("클립 시작 취소", 2000)
+            self.statusBar().showMessage(tr("클립 시작 취소"), 2000)
 
     def copy_chapters(self):
         if not self.current:
             return
         text = self.current.chapter_text()
         if not text:
-            self.statusBar().showMessage("켜진 구간이 없습니다", 3000)
+            self.statusBar().showMessage(tr("켜진 구간이 없습니다"), 3000)
             return
         QApplication.clipboard().setText(text)
-        self.statusBar().showMessage(f"챕터 {text.count(chr(10)) + 1}줄을 클립보드에 복사했습니다", 4000)
+        self.statusBar().showMessage(tr("챕터 {0}줄을 클립보드에 복사했습니다").format(text.count(chr(10)) + 1), 4000)
 
     # ---- 화면 저장 / 세로 크롭 ----
     def save_screenshot(self):
@@ -1231,19 +1243,19 @@ class MainWindow(QMainWindow):
         try:
             data = ffmpeg_tools.grab_frame(self.current.path, t, "png")
         except Exception as ex:
-            QMessageBox.warning(self, "화면 저장", f"프레임을 읽지 못했습니다.\n{ex}")
+            QMessageBox.warning(self, tr("화면 저장"), tr("프레임을 읽지 못했습니다.\n{0}").format(ex))
             return
         out = os.path.join(os.path.dirname(self.current.path), f"{self.current.stem}_{fmt_time_file(t)}.png")
         out = self._unique_path(out) if os.path.exists(out) else out
         with open(out, "wb") as f:
             f.write(data)
-        self.statusBar().showMessage(f"저장: {os.path.basename(out)}", 5000)
+        self.statusBar().showMessage(tr("저장: {0}").format(os.path.basename(out)), 5000)
 
     def _on_output_changed(self, _i: int):
         vertical = self.cb_audio.currentData() == "vertical"
         self.btn_crop.setVisible(vertical)
         self.cb_mode.setEnabled(not vertical)
-        self.cb_mode.setToolTip("세로 출력은 항상 재인코딩합니다" if vertical else self.cb_mode.toolTip())
+        self.cb_mode.setToolTip(tr("세로 출력은 항상 재인코딩합니다") if vertical else self.cb_mode.toolTip())
         self._refresh_table()
 
     def choose_crop(self):
@@ -1252,7 +1264,7 @@ class MainWindow(QMainWindow):
         try:
             data = ffmpeg_tools.grab_frame(self.current.path, self.player.position, "jpeg")
         except Exception as ex:
-            QMessageBox.warning(self, "크롭 위치", f"프레임을 읽지 못했습니다.\n{ex}")
+            QMessageBox.warning(self, tr("크롭 위치"), tr("프레임을 읽지 못했습니다.\n{0}").format(ex))
             return
         pix = QPixmap()
         pix.loadFromData(data, "JPEG")
@@ -1260,7 +1272,7 @@ class MainWindow(QMainWindow):
         if d.exec():
             self.current.crop_x = d.frac
             self._schedule_save()
-            self.statusBar().showMessage(f"세로 크롭 위치 {d.frac * 100:.0f}%", 3000)
+            self.statusBar().showMessage(tr("세로 크롭 위치 {0:.0f}%").format(d.frac * 100), 3000)
 
     # ---- 타임스탬프 / 장면 전환 ----
     def paste_timestamps(self):
@@ -1274,7 +1286,7 @@ class MainWindow(QMainWindow):
         n = self.current.add_markers([self._snap(t) for t in d.times])
         self._set_loop(-1)
         self._changed()
-        self.statusBar().showMessage(f"타임스탬프 {len(d.times)}개 중 마커 {n}개 추가 (Ctrl+Z 로 되돌리기)", 6000)
+        self.statusBar().showMessage(tr("타임스탬프 {0}개 중 마커 {1}개 추가 (Ctrl+Z 로 되돌리기)").format(len(d.times), n), 6000)
 
     def auto_markers_scene(self):
         if not self.current:
@@ -1287,8 +1299,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("scene_th", d.threshold)
         self.settings.setValue("scene_gap", d.min_gap)
         self.progress.setValue(0)
-        self.progress.setFormat("장면 전환 분석 %p%")
-        self.statusBar().showMessage("장면 전환 분석 중… (내보내기 패널 진행률)")
+        self.progress.setFormat(tr("장면 전환 분석 %p%"))
+        self.statusBar().showMessage(tr("장면 전환 분석 중… (내보내기 패널 진행률)"))
         self.scene_worker = SceneWorker(self.current.path, self.current.duration, d.threshold, d.min_gap, self)
         self.scene_worker.progress.connect(lambda f: self.progress.setValue(int(f * 1000)))
         self.scene_worker.done.connect(self._on_scene_done)
@@ -1301,14 +1313,14 @@ class MainWindow(QMainWindow):
             return
         times = [t for t in times if 0.5 < t < proj.duration - 0.5]
         if not times:
-            self.statusBar().showMessage("장면 전환을 찾지 못했습니다. 민감도를 낮춰 보세요.", 5000)
+            self.statusBar().showMessage(tr("장면 전환을 찾지 못했습니다. 민감도를 낮춰 보세요."), 5000)
             return
         proj.push_undo()
         n = proj.add_markers([self._snap(t) for t in times])
         if proj is self.current:
             self._set_loop(-1)
             self._changed()
-        self.statusBar().showMessage(f"장면 전환 {len(times)}개 → 마커 {n}개 추가 (Ctrl+Z 로 되돌리기)", 6000)
+        self.statusBar().showMessage(tr("장면 전환 {0}개 → 마커 {1}개 추가 (Ctrl+Z 로 되돌리기)").format(len(times), n), 6000)
 
     # ---- 업데이트 ----
     def _auto_check_updates(self):
@@ -1330,7 +1342,7 @@ class MainWindow(QMainWindow):
             return
         self._update_manual = manual
         if manual:
-            self.statusBar().showMessage("업데이트 확인 중…", 5000)
+            self.statusBar().showMessage(tr("업데이트 확인 중…"), 5000)
         self.update_worker = updater.UpdateCheckWorker(__version__, self)
         self.update_worker.result.connect(self._on_update_result)
         self.update_worker.start()
@@ -1338,14 +1350,14 @@ class MainWindow(QMainWindow):
     def _on_update_result(self, rel):
         if not rel:
             if self._update_manual:
-                QMessageBox.information(self, "업데이트 확인", f"지금 버전 {__version__} 이 최신입니다.\n(또는 확인에 실패했습니다 — 로그 참고)")
+                QMessageBox.information(self, tr("업데이트 확인"), tr("지금 버전 {0} 이 최신입니다.\n(또는 확인에 실패했습니다 — 로그 참고)").format(__version__))
             return
         if not self._update_manual and self.settings.value("skip_version", "") == rel["version"]:
             return
         self.update_info = rel
-        self.btn_update.setText(f"⬆ 새 버전 {rel['version']}")
+        self.btn_update.setText(tr("⬆ 새 버전 {0}").format(rel['version']))
         self.btn_update.show()
-        self.statusBar().showMessage(f"새 버전 {rel['version']} 이 있습니다. 오른쪽 아래 버튼을 누르세요.", 8000)
+        self.statusBar().showMessage(tr("새 버전 {0} 이 있습니다. 오른쪽 아래 버튼을 누르세요.").format(rel['version']), 8000)
         if self._update_manual:
             self.show_update_dialog()
 
@@ -1354,7 +1366,7 @@ class MainWindow(QMainWindow):
             return
         can, why = updater.can_self_update()
         if self.export_worker and self.export_worker.isRunning():
-            can, why = False, "내보내기가 진행 중입니다. 끝난 뒤 다시 시도하세요"
+            can, why = False, tr("내보내기가 진행 중입니다. 끝난 뒤 다시 시도하세요")
         d = UpdateDialog(self, self.update_info, __version__,
                          lambda rel: updater.UpdateDownloadWorker(rel, self), can, why)
         d.exec()
@@ -1365,35 +1377,35 @@ class MainWindow(QMainWindow):
             self._apply_update(d.new_dir)
 
     def _apply_update(self, new_dir: str):
-        if QMessageBox.question(self, "업데이트", "프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다.\n계속할까요?") != QMessageBox.Yes:
+        if QMessageBox.question(self, tr("업데이트"), tr("프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다.\n계속할까요?")) != QMessageBox.Yes:
             return
         try:
             updater.launch_replacer(new_dir)
         except Exception as ex:
             LOG.exception("교체 스크립트 실행 실패")
-            QMessageBox.critical(self, "업데이트", f"교체를 시작하지 못했습니다.\n{ex}")
+            QMessageBox.critical(self, tr("업데이트"), tr("교체를 시작하지 못했습니다.\n{0}").format(ex))
             return
         self._updating = True
         self.close()
 
     def notify_startup_flag(self, flag: str):
         if flag == "--updated":
-            self.statusBar().showMessage(f"업데이트 완료 — ClipSlicer {__version__}", 10000)
+            self.statusBar().showMessage(tr("업데이트 완료 — ClipSlicer {0}").format(__version__), 10000)
             LOG.info("업데이트 완료 후 재시작")
         elif flag == "--update-failed":
-            QMessageBox.warning(self, "업데이트 실패", "파일 교체에 실패해 이전 버전으로 되돌렸습니다.\nlogs\\update.log 를 확인해 주세요.")
+            QMessageBox.warning(self, tr("업데이트 실패"), tr("파일 교체에 실패해 이전 버전으로 되돌렸습니다.\nlogs\\update.log 를 확인해 주세요."))
 
     # ---- 유튜브 ----
     def _yt_template(self) -> str:
-        return self.settings.value("yt_desc_template", "{source} 에서 잘라낸 클립 ({start} ~ {end})") or "{source} 에서 잘라낸 클립 ({start} ~ {end})"
+        return self.settings.value("yt_desc_template", tr("{source} 에서 잘라낸 클립 ({start} ~ {end})")) or tr("{source} 에서 잘라낸 클립 ({start} ~ {end})")
 
     def edit_yt_template(self):
         from PySide6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getMultiLineText(
-            self, "유튜브 설명 템플릿",
-            "올릴 때 설명란에 미리 채울 내용. 자리표시자: {title} {source} {start} {end} {n}", self._yt_template())
+            self, tr("유튜브 설명 템플릿"),
+            tr("올릴 때 설명란에 미리 채울 내용. 자리표시자: {title} {source} {start} {end} {n}"), self._yt_template())
         if ok:
-            self.settings.setValue("yt_desc_template", text.strip() or "{source} 에서 잘라낸 클립 ({start} ~ {end})")
+            self.settings.setValue("yt_desc_template", text.strip() or tr("{source} 에서 잘라낸 클립 ({start} ~ {end})"))
 
     def _open_upload_for_jobs(self, jobs):
         files = []
@@ -1407,7 +1419,7 @@ class MainWindow(QMainWindow):
 
     def _open_upload(self, files):
         if not yt.is_connected():
-            if QMessageBox.question(self, "유튜브", "유튜브 계정이 연결되어 있지 않습니다. 지금 연결할까요?") == QMessageBox.Yes:
+            if QMessageBox.question(self, tr("유튜브"), tr("유튜브 계정이 연결되어 있지 않습니다. 지금 연결할까요?")) == QMessageBox.Yes:
                 ConnectDialog(self).exec()
             if not yt.is_connected():
                 return
@@ -1416,7 +1428,7 @@ class MainWindow(QMainWindow):
 
     def upload_files_to_youtube(self):
         start = self.ed_outdir.text().strip() or (os.path.dirname(self.current.path) if self.current else "")
-        paths, _ = QFileDialog.getOpenFileNames(self, "유튜브에 올릴 영상", start, "영상 (*.mp4 *.mkv *.mov *.webm *.avi);;모든 파일 (*.*)")
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("유튜브에 올릴 영상"), start, tr("영상 (*.mp4 *.mkv *.mov *.webm *.avi);;모든 파일 (*.*)"))
         if not paths:
             return
         files = [(p, {"title": os.path.splitext(os.path.basename(p))[0], "source": "", "start": 0.0, "end": 0.0, "n": ""}) for p in paths]
@@ -1457,7 +1469,7 @@ class MainWindow(QMainWindow):
             self.player.seek(seg.start)
             if self.player.paused:
                 self.player.toggle_pause()
-            self.statusBar().showMessage(f"구간 {idx + 1} 반복 재생 (L 또는 더블클릭으로 해제)", 3000)
+            self.statusBar().showMessage(tr("구간 {0} 반복 재생 (L 또는 더블클릭으로 해제)").format(idx + 1), 3000)
 
     def _on_loop_shortcut(self):
         if not self.current:
@@ -1492,7 +1504,7 @@ class MainWindow(QMainWindow):
         self.player.seek(a)
         if self.player.paused:
             self.player.toggle_pause()
-        self.statusBar().showMessage(f"{fmt_time(a)} ~ {fmt_time(b)} 반복 중 (R 로 해제)", 3000)
+        self.statusBar().showMessage(tr("{0} ~ {1} 반복 중 (R 로 해제)").format(fmt_time(a), fmt_time(b)), 3000)
 
     def _on_preview_button(self, checked: bool):
         if checked and not self.preview_active:
@@ -1541,12 +1553,12 @@ class MainWindow(QMainWindow):
                     it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                     self.table.setItem(i, col, it)
                 if merge:
-                    name = QTableWidgetItem("(합쳐짐)" if s.enabled else "")
+                    name = QTableWidgetItem(tr("(합쳐짐)") if s.enabled else "")
                     name.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                     name.setForeground(Qt.gray)
                 else:
                     name = QTableWidgetItem(self.current.output_name(i, ext, self.pattern))
-                    name.setToolTip("더블클릭해서 파일명 변경 (비우면 자동 이름)")
+                    name.setToolTip(tr("더블클릭해서 파일명 변경 (비우면 자동 이름)"))
                     if not s.name:
                         name.setForeground(Qt.gray)
                 self.table.setItem(i, COL_NAME, name)
@@ -1602,7 +1614,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ 내보내기
     def choose_outdir(self):
-        d = QFileDialog.getExistingDirectory(self, "출력 폴더", self.ed_outdir.text() or "")
+        d = QFileDialog.getExistingDirectory(self, tr("출력 폴더"), self.ed_outdir.text() or "")
         if d:
             self.ed_outdir.setText(d)
 
@@ -1657,7 +1669,7 @@ class MainWindow(QMainWindow):
         projects = list(self.projects.values()) if all_files else ([self.current] if self.current else [])
         jobs = self._build_jobs([p for p in projects if p])
         if not jobs:
-            QMessageBox.information(self, "내보내기", "내보낼 구간이 없습니다.\n타임라인에서 S 키로 마커를 찍거나, 구간을 켜 주세요.")
+            QMessageBox.information(self, tr("내보내기"), tr("내보낼 구간이 없습니다.\n타임라인에서 S 키로 마커를 찍거나, 구간을 켜 주세요."))
             return
         existing = [j.dst for j in jobs if os.path.exists(j.dst)]
         if existing:
@@ -1670,17 +1682,17 @@ class MainWindow(QMainWindow):
                         j.dst = self._unique_path(j.dst)
         self.player.pause()
         self.log.clear()
-        mode_name = {"fast": "빠르게", "smart": "스마트", "precise": "정확하게"}[jobs[0].mode]
+        mode_name = {"fast": tr("빠르게"), "smart": tr("스마트"), "precise": tr("정확하게")}[jobs[0].mode]
         extra = []
         if jobs[0].audio:
-            extra.append("오디오만")
+            extra.append(tr("오디오만"))
         if jobs[0].vertical is not None:
-            extra.append("세로 9:16")
+            extra.append(tr("세로 9:16"))
         if self.cb_merge.isChecked():
-            extra.append("합치기")
+            extra.append(tr("합치기"))
         if jobs[0].gpu and jobs[0].mode != "fast" and not jobs[0].audio:
             extra.append(jobs[0].gpu)
-        self._log(f"{len(jobs)}개 작업 시작 — {mode_name}" + (f" ({', '.join(extra)})" if extra else ""))
+        self._log(tr("{0}개 작업 시작 — {1}").format(len(jobs), mode_name) + (f" ({', '.join(extra)})" if extra else ""))
         self.progress.setValue(0)
         self.progress.setFormat("%p%")
         self._set_export_running(True)
@@ -1696,7 +1708,7 @@ class MainWindow(QMainWindow):
     def cancel_export(self):
         if self.export_worker:
             self.export_worker.cancel()
-            self._log("취소 요청…")
+            self._log(tr("취소 요청…"))
 
     def _set_export_running(self, running: bool):
         self.btn_export_cur.setEnabled(not running)
@@ -1722,9 +1734,9 @@ class MainWindow(QMainWindow):
         self._set_export_running(False)
         if fail_n == 0:
             self.progress.setValue(1000)
-        self.progress.setFormat(f"완료: 성공 {ok_n}, 실패 {fail_n}")
-        self._log(f"완료 — 성공 {ok_n}, 실패 {fail_n}")
-        self.statusBar().showMessage(f"내보내기 완료: 성공 {ok_n}, 실패 {fail_n}", 6000)
+        self.progress.setFormat(tr("완료: 성공 {0}, 실패 {1}").format(ok_n, fail_n))
+        self._log(tr("완료 — 성공 {0}, 실패 {1}").format(ok_n, fail_n))
+        self.statusBar().showMessage(tr("내보내기 완료: 성공 {0}, 실패 {1}").format(ok_n, fail_n), 6000)
         if self.cb_open.isChecked() and ok_n and self._export_dirs and not self.cb_youtube.isChecked():
             for d in self._export_dirs[:3]:
                 try:

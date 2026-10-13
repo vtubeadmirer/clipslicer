@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from .i18n import tr
 import logging
 import urllib.parse
 
@@ -73,7 +74,7 @@ def apply():
         except Exception as ex:
             if not _is_source_url_error(ex):
                 raise
-            doc = self._download_xml(mpd_url, video_id, note="HLS 주소 찾는 중", fatal=False,
+            doc = self._download_xml(mpd_url, video_id, note=tr("HLS 주소 찾는 중"), fatal=False,
                                      data=data, headers=headers, query=query)
             res = hls_from_doc(self, doc, video_id)
             if res is None:

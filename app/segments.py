@@ -1,6 +1,7 @@
 """자르기 마커 -> 구간 모델, 실행 취소 스냅샷, 작업 파일 저장/복원."""
 from __future__ import annotations
 
+from .i18n import tr
 import json
 import os
 import re
@@ -187,7 +188,7 @@ class ClipProject:
         lines = []
         for i, s in enumerate(self.segments):
             if s.enabled:
-                name = s.name.strip() or f"구간 {i + 1}"
+                name = s.name.strip() or tr("구간 {0}").format(i + 1)
                 lines.append(f"{fmt_time(s.start, ms=False).rjust(5, '0') if s.start < 3600 else fmt_time(s.start, ms=False)} {name}")
         return "\n".join(lines)
 

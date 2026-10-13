@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+from .i18n import tr
 import logging
 import os
 import platform
@@ -104,13 +105,13 @@ def install_error_dialog(parent):
     def show(text: str):
         box = QMessageBox(parent)
         box.setIcon(QMessageBox.Critical)
-        box.setWindowTitle("문제가 생겼습니다")
-        last = text.strip().splitlines()[-1] if text.strip() else "알 수 없는 오류"
-        box.setText(f"{last}\n\n프로그램은 계속 쓸 수 있지만, 방금 동작은 완료되지 않았을 수 있습니다.")
+        box.setWindowTitle(tr("문제가 생겼습니다"))
+        last = text.strip().splitlines()[-1] if text.strip() else tr("알 수 없는 오류")
+        box.setText(tr("{0}\n\n프로그램은 계속 쓸 수 있지만, 방금 동작은 완료되지 않았을 수 있습니다.").format(last))
         box.setDetailedText(text)
-        b_log = QPushButton("로그 폴더 열기")
+        b_log = QPushButton(tr("로그 폴더 열기"))
         box.addButton(b_log, QMessageBox.ActionRole)
-        box.addButton("닫기", QMessageBox.RejectRole)
+        box.addButton(tr("닫기"), QMessageBox.RejectRole)
         box.exec()
         if box.clickedButton() is b_log:
             try:

@@ -11,7 +11,7 @@ Pull clips out of stream VODs and lectures, turn them into Shorts, and upload th
 - Cuts without re-encoding by default, so it finishes **in seconds** with zero quality loss
 - Built on ffmpeg, libmpv and PySide6, so it plays and edits nearly every format
 
-> The UI is currently Korean only. An English UI is planned.
+> UI available in Korean and English (Settings ▸ Language; follows the system language by default).
 
 ```mermaid
 flowchart LR
