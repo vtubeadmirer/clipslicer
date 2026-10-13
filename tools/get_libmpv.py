@@ -21,6 +21,10 @@ import sys
 import tempfile
 import urllib.request
 
+# 고정 버전 (API 조회 없이 직접 받음 — GitHub Actions 러너는 비인증 API 호출이 자주 막힌다).
+# 올릴 때는 두 값을 같이 바꾸고 실제 재생 테스트를 할 것. --latest 를 주면 API 로 최신을 찾는다.
+TAG = "20261013"
+ASSET = "mpv-dev-x86_64-20261013-git-9d144e57b6.7z"
 API = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(ROOT, "bin")
@@ -67,20 +71,27 @@ def extract_with_py7zr(data: bytes, out: str) -> str | None:
 
 
 def main():
-    with urllib.request.urlopen(API) as r:
-        rel = json.load(r)
-    asset = next((a for a in rel["assets"]
-                  if a["name"].startswith("mpv-dev-x86_64-") and "-v3-" not in a["name"]
-                  and a["name"].endswith(".7z")), None)
-    if not asset:
-        print("mpv-dev-x86_64 아카이브를 찾지 못했습니다.")
-        return 1
-    print(f"다운로드: {asset['name']} ({asset['size'] / 1e6:.1f} MB)")
-    with urllib.request.urlopen(asset["browser_download_url"]) as r:
+    tag, name = TAG, ASSET
+    if "--latest" in sys.argv:
+        req = urllib.request.Request(API, headers={"User-Agent": "ClipSlicer-tools"})
+        with urllib.request.urlopen(req) as r:
+            rel = json.load(r)
+        asset = next((a for a in rel["assets"]
+                      if a["name"].startswith("mpv-dev-x86_64-") and "-v3-" not in a["name"]
+                      and a["name"].endswith(".7z")), None)
+        if not asset:
+            print("mpv-dev-x86_64 아카이브를 찾지 못했습니다.")
+            return 1
+        tag, name = rel["tag_name"], asset["name"]
+    url = f"https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/{tag}/{name}"
+    print(f"다운로드: {name}")
+    req = urllib.request.Request(url, headers={"User-Agent": "ClipSlicer-tools"})
+    with urllib.request.urlopen(req) as r:
         data = r.read()
+    print(f"  {len(data) / 1e6:.1f} MB 받음")
 
     tmp = tempfile.mkdtemp(prefix="libmpv_")
-    archive = os.path.join(tmp, asset["name"])
+    archive = os.path.join(tmp, name)
     with open(archive, "wb") as f:
         f.write(data)
 
