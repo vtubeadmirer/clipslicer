@@ -23,3 +23,6 @@ settings.ini
 logs/
 *.clipslicer.cache
 *.clipslicer.json
+# 유튜브 자격 증명 (절대 올리지 말 것)
+youtube_token.bin
+youtube_client_secret.json

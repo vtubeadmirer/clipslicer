@@ -51,7 +51,7 @@
 <header><div class="in">
   <div class="logo"><div class="film"></div><div class="line"></div></div>
   <div><h1>ClipSlicer 사용 설명서</h1>
-  <p>마커만 찍으면 구간별로 잘라 주는 가벼운 Windows 영상 자르기 도구 · 버전 0.5</p></div>
+  <p>마커만 찍으면 구간별로 잘라 주는 가벼운 Windows 영상 자르기 도구 · 버전 0.6</p></div>
 </div></header>
 
 <div class="wrap">
@@ -63,7 +63,7 @@
   <div class="grp">내보내기</div>
   <a href="#modes">자르기 모드</a><a href="#keyframe">키프레임 이야기</a><a href="#export">내보내기 옵션</a>
   <div class="grp">편의 기능</div>
-  <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#save">자동 저장 · 설정</a>
+  <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#youtube">유튜브 올리기</a><a href="#save">자동 저장 · 설정</a>
   <div class="grp">기타</div>
   <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
 </nav>
@@ -282,6 +282,21 @@ m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192 kbps 로 변환. m
 <p><b>구간만 받기</b>를 켜고 <code>1:02:00 ~ 1:15:30</code> 처럼 넣으면 그 부분만 받습니다. 몇 시간짜리 다시보기에 꼭 쓰세요 (전체는 수십 GB).
 치지직 다시보기는 yt-dlp 가 아직 지원하지 못하는 형식이라 ClipSlicer 가 자체적으로 우회해서 받습니다.</p>
 <div class="card warn">로그인이 필요한 영상, 회원 전용 다시보기, DRM 영상은 받을 수 없습니다. 사이트가 바뀌면 yt-dlp 갱신이 필요할 수 있는데, 새 ClipSlicer 릴리스에 최신 버전이 포함됩니다.</div>
+
+<h2 id="youtube">유튜브 올리기</h2>
+<p>내보내기 패널의 <b>완료 후 유튜브에 올리기</b>를 켜면 내보내기가 끝날 때 올리기 창이 열립니다. 파일마다 제목·설명·태그·썸네일을 채우고
+공개 범위·카테고리·재생목록을 골라 <b>올리기</b>. 이미 있는 파일은 <b>파일 ▸ 유튜브에 올리기</b> (<kbd>Ctrl+U</kbd>).</p>
+<h3>처음 한 번: 계정 연결 (약 10분, 무료)</h3>
+<ol>
+ <li>Google Cloud 콘솔에서 새 프로젝트 만들기</li>
+ <li>YouTube Data API v3 사용 설정</li>
+ <li>OAuth 동의 화면: 외부, 앱 이름·이메일 입력, <b>테스트 사용자에 본인 계정 추가</b></li>
+ <li>사용자 인증 정보 ▸ OAuth 클라이언트 ID ▸ <b>데스크톱 앱</b> ▸ JSON 다운로드</li>
+ <li>ClipSlicer 설정 ▸ 유튜브 계정 연결 ▸ client_secret.json 등록 ▸ 계정 연결 (브라우저에서 허용)</li>
+</ol>
+<p>로그인 정보는 Windows DPAPI 로 암호화해 프로그램 폴더의 <code>youtube_token.bin</code> 에 저장되고, 다른 PC 로 복사해도 열리지 않습니다 (다시 연결).</p>
+<div class="card warn"><b>비공개로만 올라갑니다.</b> 구글 심사(앱 검증) 전의 프로젝트로 올린 영상은 비공개로 고정됩니다. 메타데이터를 다 채워 올린 뒤 유튜브 스튜디오에서 공개 범위만 바꾸세요.
+하루 업로드 한도는 API 할당량 기준 약 6개입니다.</div>
 
 <h2 id="save">자동 저장 · 설정</h2>
 <h3>작업 파일 (.clipslicer.json)</h3>

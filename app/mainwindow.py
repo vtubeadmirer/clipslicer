@@ -19,6 +19,8 @@ import logging
 from .paths import make_settings
 from .logging_setup import log_dir
 from . import updater
+from . import youtube as yt
+from .youtube_ui import ConnectDialog, UploadDialog, make_items
 from .dialogs import SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, TimestampDialog, CropDialog, DownloadDialog, UpdateDialog
 from .help import HelpDialog
 from .player import MpvWidget
@@ -389,6 +391,10 @@ class MainWindow(QMainWindow):
         self.cb_open.setChecked(True)
         self.cb_open.setFocusPolicy(Qt.NoFocus)
         optrow.addWidget(self.cb_open)
+        self.cb_youtube = QCheckBox("완료 후 유튜브에 올리기")
+        self.cb_youtube.setToolTip("내보내기가 끝나면 잘린 파일들을 유튜브(비공개)에 올리는 창을 엽니다. 설정 ▸ 유튜브 계정 연결 필요")
+        self.cb_youtube.setFocusPolicy(Qt.NoFocus)
+        optrow.addWidget(self.cb_youtube)
         optrow.addStretch(1)
         gv.addLayout(optrow)
 
@@ -461,6 +467,11 @@ class MainWindow(QMainWindow):
         a = QAction("현재 화면을 PNG 로 저장", self)
         a.setShortcut("Ctrl+P")
         a.triggered.connect(self.save_screenshot)
+        m_file.addAction(a)
+        m_file.addSeparator()
+        a = QAction("유튜브에 올리기… (파일 선택)", self)
+        a.setShortcut("Ctrl+U")
+        a.triggered.connect(self.upload_files_to_youtube)
         m_file.addAction(a)
         m_file.addSeparator()
         a = QAction("현재 영상 내보내기", self)
@@ -559,6 +570,13 @@ class MainWindow(QMainWindow):
         self.act_compat.toggled.connect(self._on_compat_toggled)
         m_set.addAction(self.act_compat)
         m_set.addSeparator()
+        a = QAction("유튜브 계정 연결…", self)
+        a.triggered.connect(lambda: ConnectDialog(self).exec())
+        m_set.addAction(a)
+        a = QAction("유튜브 설명 템플릿…", self)
+        a.triggered.connect(self.edit_yt_template)
+        m_set.addAction(a)
+        m_set.addSeparator()
         a = QAction("파일명 규칙…", self)
         a.triggered.connect(self.edit_pattern)
         m_set.addAction(a)
@@ -627,6 +645,7 @@ class MainWindow(QMainWindow):
         idx = self.cb_mode.findData(mode)
         self.cb_mode.setCurrentIndex(idx if idx >= 0 else 0)
         self.cb_open.setChecked(s.value("open_after", "1") == "1")
+        self.cb_youtube.setChecked(s.value("yt_after", "0") == "1")
         self.act_snap.setChecked(s.value("snap_keyframes", "0") == "1")
         self.act_gpu.setChecked(s.value("use_gpu", "1") == "1")
         self.act_autosave.setChecked(s.value("autosave", "1") == "1")
@@ -651,6 +670,7 @@ class MainWindow(QMainWindow):
         s.setValue("out_dir", self.ed_outdir.text())
         s.setValue("mode", self._mode())
         s.setValue("open_after", "1" if self.cb_open.isChecked() else "0")
+        s.setValue("yt_after", "1" if self.cb_youtube.isChecked() else "0")
         s.setValue("snap_keyframes", "1" if self.act_snap.isChecked() else "0")
         s.setValue("use_gpu", "1" if self.act_gpu.isChecked() else "0")
         s.setValue("autosave", "1" if self.act_autosave.isChecked() else "0")
@@ -1363,6 +1383,45 @@ class MainWindow(QMainWindow):
         elif flag == "--update-failed":
             QMessageBox.warning(self, "업데이트 실패", "파일 교체에 실패해 이전 버전으로 되돌렸습니다.\nlogs\\update.log 를 확인해 주세요.")
 
+    # ---- 유튜브 ----
+    def _yt_template(self) -> str:
+        return self.settings.value("yt_desc_template", "{source} 에서 잘라낸 클립 ({start} ~ {end})") or "{source} 에서 잘라낸 클립 ({start} ~ {end})"
+
+    def edit_yt_template(self):
+        from PySide6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getMultiLineText(
+            self, "유튜브 설명 템플릿",
+            "올릴 때 설명란에 미리 채울 내용. 자리표시자: {title} {source} {start} {end} {n}", self._yt_template())
+        if ok:
+            self.settings.setValue("yt_desc_template", text.strip() or "{source} 에서 잘라낸 클립 ({start} ~ {end})")
+
+    def _open_upload_for_jobs(self, jobs):
+        files = []
+        for j in jobs:
+            proj = self.projects.get(j.src)
+            seg_info = {"title": os.path.splitext(os.path.basename(j.dst))[0],
+                        "source": proj.stem if proj else os.path.splitext(os.path.basename(j.src))[0],
+                        "start": j.parts[0].start, "end": j.parts[-1].end, "n": ""}
+            files.append((j.dst, seg_info))
+        self._open_upload(files)
+
+    def _open_upload(self, files):
+        if not yt.is_connected():
+            if QMessageBox.question(self, "유튜브", "유튜브 계정이 연결되어 있지 않습니다. 지금 연결할까요?") == QMessageBox.Yes:
+                ConnectDialog(self).exec()
+            if not yt.is_connected():
+                return
+        items = make_items(files, self._yt_template())
+        UploadDialog(self, items, self.settings).exec()
+
+    def upload_files_to_youtube(self):
+        start = self.ed_outdir.text().strip() or (os.path.dirname(self.current.path) if self.current else "")
+        paths, _ = QFileDialog.getOpenFileNames(self, "유튜브에 올릴 영상", start, "영상 (*.mp4 *.mkv *.mov *.webm *.avi);;모든 파일 (*.*)")
+        if not paths:
+            return
+        files = [(p, {"title": os.path.splitext(os.path.basename(p))[0], "source": "", "start": 0.0, "end": 0.0, "n": ""}) for p in paths]
+        self._open_upload(files)
+
     # ---- URL 다운로드 ----
     def open_url(self):
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
@@ -1666,12 +1725,16 @@ class MainWindow(QMainWindow):
         self.progress.setFormat(f"완료: 성공 {ok_n}, 실패 {fail_n}")
         self._log(f"완료 — 성공 {ok_n}, 실패 {fail_n}")
         self.statusBar().showMessage(f"내보내기 완료: 성공 {ok_n}, 실패 {fail_n}", 6000)
-        if self.cb_open.isChecked() and ok_n and self._export_dirs:
+        if self.cb_open.isChecked() and ok_n and self._export_dirs and not self.cb_youtube.isChecked():
             for d in self._export_dirs[:3]:
                 try:
                     os.startfile(d)
                 except OSError:
                     subprocess.Popen(["explorer", d])
+        if self.cb_youtube.isChecked() and ok_n and self.export_worker:
+            done = [(j, i) for i, j in enumerate(self.export_worker.jobs) if os.path.exists(j.dst) and not j.audio]
+            if done:
+                QTimer.singleShot(200, lambda: self._open_upload_for_jobs([j for j, _ in done]))
 
     def _log(self, text: str):
         self.log.appendPlainText(text)
