@@ -89,3 +89,21 @@ def test_quota_tracking():
     s["yt_quota_day"] = "2000-01-01"
     assert yt.uploads_today(s) == 0
     assert len(yt.quota_day()) == 10
+
+
+def test_to_rfc3339_utc_fixed_offsets():
+    import datetime as dt
+    kst = dt.timezone(dt.timedelta(hours=9))
+    assert yt.to_rfc3339_utc(dt.datetime(2030, 1, 1, 9, 0, tzinfo=kst)) == "2030-01-01T00:00:00Z"
+    assert yt.to_rfc3339_utc(dt.datetime(2030, 1, 1, 0, 30, tzinfo=kst)) == "2029-12-31T15:30:00Z"
+    minus5 = dt.timezone(dt.timedelta(hours=-5))
+    assert yt.to_rfc3339_utc(dt.datetime(2030, 6, 15, 22, 15, 30, 999, tzinfo=minus5)) == "2030-06-16T03:15:30Z"
+    assert yt.to_rfc3339_utc(dt.datetime(2030, 3, 3, 12, 0, tzinfo=dt.timezone.utc)) == "2030-03-03T12:00:00Z"
+    # naive → 로컬로 해석: 다시 로컬로 바꾸면 같은 시각 (시간대에 무관한 검사)
+    naive = dt.datetime(2030, 6, 15, 12, 0)
+    s = yt.to_rfc3339_utc(naive)
+    assert s.endswith("Z") and len(s) == 20
+    back = dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc).astimezone().replace(tzinfo=None)
+    assert back == naive
+    meta = yt.build_metadata("a", "", [], "public", publish_at=s)
+    assert meta["status"] == {"privacyStatus": "private", "selfDeclaredMadeForKids": False, "publishAt": s}

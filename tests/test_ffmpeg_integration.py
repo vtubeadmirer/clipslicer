@@ -107,6 +107,21 @@ def test_audio_extract(media):
     assert abs(dur(m4a) - 3.0) < 0.15 and abs(dur(mp3) - 3.0) < 0.15
 
 
+@pytest.mark.parametrize("fmt,ext", [("aac", ".m4a"), ("mp3", ".mp3")])
+@pytest.mark.parametrize("normalize", [False, True])
+def test_audio_only_concat(media, fmt, ext, normalize):
+    """오디오만 + 하나로 합치기: 비디오 스트림이 없는 조각을 concat 해도 실패하지 않아야 한다 (회귀)."""
+    c = ft.Cutter()
+    p1 = os.path.join(media["dir"], f"ac1_{fmt}{ext}")
+    p2 = os.path.join(media["dir"], f"ac2_{fmt}{ext}")
+    c.cut_audio(media["mp4"], 0.5, 2.0, p1, fmt, "aac", lambda p: None)
+    c.cut_audio(media["mp4"], 3.0, 5.0, p2, fmt, "aac", lambda p: None)
+    out = os.path.join(media["dir"], f"merged_{fmt}_{int(normalize)}{ext}")
+    c.concat([p1, p2], out, lambda p: None, normalize=normalize)
+    assert os.path.exists(out) and os.path.getsize(out) > 0
+    assert abs(dur(out) - 3.5) < 0.25
+
+
 def test_mkv_with_subtitles_to_mp4(media):
     """mkv 의 srt 자막은 mp4 로 복사할 수 없다 → 영상·오디오만 복사해서 성공해야 한다."""
     c = ft.Cutter()

@@ -10,23 +10,25 @@ Pull clips out of stream VODs and lectures, turn them into Shorts, and upload th
 - No installer, fully portable (copy the folder to a USB stick and it still runs)
 - Cuts without re-encoding by default, so it finishes **in seconds** with zero quality loss
 - Built on ffmpeg, libmpv and PySide6, so it plays and edits nearly every format
+- For streamers: bookmark moments while live, find highlights from chat and audio reactions, captions and watermark, post to Discord (0.8)
 
 > UI available in Korean and English (Settings ▸ Language; follows the system language by default).
 
 ```mermaid
 flowchart LR
-    A["🎬 Open<br/>files · folder · URL"] --> B["▶ Scrub<br/>frame step · thumbnails · waveform"]
-    B --> C["✂ Mark<br/>S · I/O · auto markers"]
-    C --> D["📦 Export<br/>per segment · merge · Shorts"]
-    D --> E["⬆ YouTube<br/>private · metadata"]
+    A["🎬 Open<br/>files · folder · URL · recent"] --> B["▶ Scrub<br/>frame step · thumbnails · waveform · chat graph"]
+    B --> C["✂ Mark<br/>S · I/O · auto markers · bookmarks"]
+    C --> D["📦 Export<br/>per segment · merge · Shorts · caption"]
+    D --> E["⬆ Publish<br/>YouTube · Discord"]
 ```
 
 ## Download
 
-Grab `ClipSlicer-vX.Y.Z-win64.zip` from [Releases](https://github.com/vtubeadmirer/clipslicer/releases/latest), unzip, run `ClipSlicer.exe`.
+Grab `ClipSlicer-vX.Y.Z-win64.zip` from [Releases](https://github.com/vtubeadmirer/clipslicer/releases/latest), unzip, run `ClipSlicer.exe`. The current version is **0.8**.
 Windows 10 (1809+) / 11, 64-bit. If SmartScreen warns on first launch, choose **More info → Run anyway**.
 
 When a new version is published, an **⬆ update** button appears inside the app; one click downloads, verifies, swaps the files and restarts.
+Releases that only change the code arrive as a **lite update** of about 20 MB that keeps the bundled ffmpeg and libmpv.
 
 ## 30-second tour
 
@@ -40,13 +42,15 @@ When a new version is published, an **⬆ update** button appears inside the app
 
 | Area | What you get |
 |---|---|
-| Cutting | Split mode (`S`), clip mode (`I`/`O`), frame stepping, undo/redo, auto-saved project files (`.clipslicer.json`) |
-| Timeline | Thumbnail strip, audio waveform, keyframe marks, `Ctrl+wheel` zoom, hover preview, analysis cache |
-| Auto markers | Silence detection, scene-change detection, paste timestamps (YouTube chapters, comments) |
-| Output | Fast (lossless copy), Smart (re-encode only the first second), Precise (full re-encode), **vertical 9:16 Shorts**, audio only (m4a/mp3), merge segments, filename patterns, GPU encoding (NVENC/QSV/AMF) |
-| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs |
-| Publish | **YouTube upload** of the cut files to your connected channel as private videos (title, description, tags, thumbnail, playlist, resumable, pre-upload limit checks), copy chapter list, save current frame as PNG |
-| Ops | Update notifications with self-replacement, error log and dialogs, compatibility mode for GPU-less machines, portable settings (`settings.ini`) |
+| Cutting | Split mode (`S`), clip mode (`I`/`O`), frame stepping, undo/redo, segment names (`N`/`F2`) and **notes**, **merge order** ▲▼, auto-saved project files (`.clipslicer.json` + `.bak`) |
+| Timeline | Thumbnail strip, audio waveform, **chat reaction graph**, keyframe marks, `Ctrl+wheel` zoom, hover preview, analysis cache, collapsible right panel (`Ctrl+Shift+R`) |
+| Auto markers | Silence detection, scene-change detection, **loud moments (laughter, cheering)**, paste timestamps (YouTube chapters, comments), **chat reaction peaks and keyword markers** (CHZZK and YouTube live replays) |
+| Stream bookmarks | **Stream bookmark mode**: a global hotkey (`Ctrl+Alt+B` …) records moments while streaming or recording; open the recording and the bookmarks are offered as markers |
+| Output | Fast (lossless copy), Smart (re-encode only the first second), Precise (full re-encode), **vertical 9:16 Shorts** (crop or **blur background**), audio only (m4a/mp3), merge segments, filename patterns, GPU encoding (NVENC/QSV/AMF) |
+| Output effects | **Loudness normalization** (-14 LUFS), **burned-in caption**, **burned-in subtitles** (srt/ass/vtt), **watermark** PNG, **intro/outro** videos |
+| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; start screen with recent work and a sample video |
+| Publish | **YouTube upload** of the cut files to your connected channel as private videos (title, description, tags, thumbnail, playlist, resumable, pre-upload limit checks), **upload presets**, **scheduled publish**, **upload history**, **Discord webhook** posting, copy chapter list, save current frame as PNG |
+| Ops | Update notifications with self-replacement (**lite updates**), tray notifications, first-run guide, error log and dialogs, compatibility mode for GPU-less machines, portable settings (`settings.ini`) |
 
 The full manual is in **[docs/index.html](docs/index.html)** (Korean) and in the in-app help (`F1`).
 
@@ -79,15 +83,29 @@ Fast is enough most of the time; use Smart when the shifted start bothers you.
 | S | Cut marker |
 | I / O | Clip start / end |
 | E | Toggle current segment |
+| N / F2 | Edit segment name (under the cursor / selected row) |
 | Delete | Delete nearest marker |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
 | R / L | Loop ±2 s around cursor / loop current segment |
 | ↑ ↓ | Previous / next segment |
+| Ctrl+Shift+↑ ↓ | Move earlier / later in the merge order |
 | Ctrl+wheel / Ctrl+0 | Zoom timeline / fit |
-| Ctrl+Shift+M / Ctrl+Shift+S / Ctrl+Shift+V | Auto markers: silence · scene change · timestamps |
+| Ctrl+Shift+R | Collapse / expand the right panel |
+| Ctrl+Shift+M / Ctrl+Shift+S / Ctrl+Shift+L | Auto markers: silence · scene change · loud moments |
+| Ctrl+Shift+V / Ctrl+Shift+C | Paste timestamps / chat reaction graph & markers |
+| Ctrl+Alt+B | Stream bookmark (global, while the bookmark window is open) |
 | Ctrl+L / Ctrl+U / Ctrl+P | Open from URL / upload to YouTube / save frame as PNG |
 | Ctrl+E | Export all |
 | F1 | Help |
+
+## For streamers (0.8)
+
+- **Stream bookmark mode** (File menu): a small always-on-top window. Press the global hotkey while live to record the moment; when you open the recording, the bookmarks from that time range are offered as markers (file modified time = end of recording).
+- **Chat reaction graph** (`Ctrl+Shift+C`): fetches CHZZK VOD or YouTube live-replay chat, draws it as an orange graph on the timeline and adds markers at reaction peaks and keyword bursts. Chat is cached as `video.clipslicer.chat.json`.
+- **Loud-moment markers** (`Ctrl+Shift+L`): finds laughter, cheering and other spikes in the waveform (default 2 s lead).
+- **Output effects**: loudness normalization, burned-in caption and subtitles, Shorts blur background, watermark, intro/outro (Settings ▸ Watermark / intro & outro…). A caption, subtitles or watermark forces a re-encode.
+- **Publishing**: YouTube upload presets, scheduled publish and upload history; automatic **Discord webhook** posting when an export finishes (Settings ▸ Discord webhook…).
+- **Convenience**: start screen (recent work, sample video), first-run guide, tray notifications, segment notes, merge order, `.bak` project backups, lite updates.
 
 ## About YouTube upload
 
@@ -110,6 +128,8 @@ flowchart TB
         EX["export queue"]
         DL["download"]
         UP["YouTube upload"]
+        CH["chat fetch"]
+        DC["Discord post"]
         UD["updater"]
     end
     subgraph EXT["📦 bundled tools"]
@@ -117,11 +137,13 @@ flowchart TB
         MPV["libmpv-2.dll"]
         YD["yt-dlp (embedded module)"]
     end
-    MW --> AN & EX & DL & UP & UD
+    MW --> AN & EX & DL & UP & CH & DC & UD
     MW --> PL --> MPV
     AN & EX --> FF
     DL --> YD --> FF
     UP -->|OAuth · REST| YT[("YouTube Data API")]
+    CH -->|REST · yt-dlp| CZ[("CHZZK · YouTube chat")]
+    DC -->|Webhook| DS[("Discord")]
     UD -->|Releases| GH[("GitHub")]
 ```
 
@@ -142,12 +164,16 @@ Build the exe with `.\build.ps1` → `dist\ClipSlicer\`. Pushing a `vX.Y.Z` tag 
 main.py              entry point
 app/mainwindow.py    main window
 app/player.py        libmpv player widget
-app/timeline.py      timeline widget
-app/segments.py      marker/segment model, undo, project files
-app/ffmpeg_tools.py  analysis, cutting, merging (ffmpeg)
+app/timeline.py      timeline widget (thumbnails, waveform, chat graph)
+app/segments.py      marker/segment model, notes and merge order, undo, project files (.bak), loud-peak and bookmark maths
+app/ffmpeg_tools.py  analysis, cutting, merging, caption/subtitle/watermark/intro rendering (ffmpeg)
 app/workers.py       background jobs (analysis, export, download)
-app/youtube.py       YouTube OAuth + upload   app/youtube_ui.py  upload dialogs
-app/updater.py       update check and self-replacement
+app/bookmarks.py     stream bookmarks (global hotkey, log, import)
+app/chat.py          CHZZK / YouTube chat fetch, reaction and keyword peaks
+app/discord.py       Discord webhook posting
+app/startpanel.py    start screen            app/firstrun.py  first-run guide and sample video   app/notify.py  tray notifications
+app/youtube.py       YouTube OAuth + upload   app/youtube_ui.py  upload dialogs and presets   app/upload_history.py  upload history
+app/updater.py       update check and self-replacement (lite / full)
 app/hls_section.py   HLS range download       app/ytdlp_patches.py  yt-dlp fixes
 tests/               unit and integration tests (run in CI)
 docs/index.html      user manual (Korean)

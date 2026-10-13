@@ -411,6 +411,54 @@ class DownloadDialog(QDialog):
         self.reject()
 
 
+class LoudDialog(QDialog):
+    """큰 소리(웃음·환호) 감지 조건: 배율·최소 간격·앞당김."""
+
+    def __init__(self, parent=None, factor: float = 3.0, min_gap: float = 10.0, lead: float = 2.0):
+        super().__init__(parent)
+        self.setWindowTitle(tr("큰 소리에 자동 마커"))
+        lay = QVBoxLayout(self)
+        intro = QLabel(tr("파형에서 평소보다 유난히 큰 소리가 난 곳(웃음·고함·환호)을 찾아 마커를 넣습니다.\n이미 분석된 파형을 쓰므로 바로 끝납니다."))
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        form = QFormLayout()
+        self.sp_factor = QDoubleSpinBox()
+        self.sp_factor.setRange(2.0, 8.0)
+        self.sp_factor.setSingleStep(0.5)
+        self.sp_factor.setValue(factor)
+        self.sp_factor.setSuffix(tr(" 배"))
+        self.sp_factor.setToolTip(tr("평소 음량(중앙값)의 몇 배를 넘어야 '큰 소리'로 볼지. 낮을수록 많이 잡힙니다."))
+        form.addRow(tr("기준 배율"), self.sp_factor)
+        self.sp_gap = QDoubleSpinBox()
+        self.sp_gap.setRange(1.0, 600.0)
+        self.sp_gap.setSingleStep(5.0)
+        self.sp_gap.setValue(min_gap)
+        self.sp_gap.setSuffix(tr(" 초"))
+        self.sp_gap.setToolTip(tr("이 간격보다 가까운 큰 소리는 하나로 칩니다."))
+        form.addRow(tr("마커 최소 간격"), self.sp_gap)
+        self.sp_lead = QDoubleSpinBox()
+        self.sp_lead.setRange(0.0, 30.0)
+        self.sp_lead.setSingleStep(0.5)
+        self.sp_lead.setValue(lead)
+        self.sp_lead.setSuffix(tr(" 초"))
+        self.sp_lead.setToolTip(tr("마커를 큰 소리보다 이만큼 앞에 둡니다 (클립이 반응 직전부터 시작하도록)."))
+        form.addRow(tr("앞당김"), self.sp_lead)
+        lay.addLayout(form)
+        lay.addWidget(_buttons(self, tr("찾기")))
+
+    @property
+    def factor(self) -> float:
+        return self.sp_factor.value()
+
+    @property
+    def min_gap(self) -> float:
+        return self.sp_gap.value()
+
+    @property
+    def lead(self) -> float:
+        return self.sp_lead.value()
+
+
 class UpdateDialog(QDialog):
     """새 버전 안내 + 다운로드. 결과: self.action in ('update', 'later', 'skip'), self.new_dir."""
 
@@ -424,8 +472,11 @@ class UpdateDialog(QDialog):
         self.action = "later"
         self.new_dir = ""
         lay = QVBoxLayout(self)
-        head = QLabel(tr("<b style='font-size:15px'>ClipSlicer {0}</b> &nbsp; (지금 {1})").format(rel['version'], current)
-                      + (f" &nbsp;·&nbsp; {rel['zip_size'] / 1e6:.0f} MB" if rel.get("zip_size") else ""))
+        size = rel.get("download_size") or rel.get("zip_size") or 0  # updater.UpdateCheckWorker 가 고른 zip (경량/전체) 의 크기
+        tail = f" &nbsp;·&nbsp; {size / 1e6:.0f} MB" if size else ""
+        if rel.get("kind") == "update":
+            tail += " " + tr("(경량: ffmpeg/libmpv 는 그대로)")
+        head = QLabel(tr("<b style='font-size:15px'>ClipSlicer {0}</b> &nbsp; (지금 {1})").format(rel['version'], current) + tail)
         head.setTextFormat(Qt.RichText)
         lay.addWidget(head)
         from PySide6.QtWidgets import QTextBrowser
@@ -512,3 +563,72 @@ def ask_overwrite(parent, existing: list[str]) -> str:
     if clicked == b_ren:
         return "rename"
     return "cancel"
+
+
+class RenderAssetsDialog(QDialog):
+    """워터마크 PNG(위치·투명도) 와 인트로/아웃트로 영상. 설정 키: wm_path, wm_pos, wm_opacity, intro_path, outro_path."""
+
+    POSITIONS = [("tl", "왼쪽 위"), ("tr", "오른쪽 위"), ("bl", "왼쪽 아래"), ("br", "오른쪽 아래")]
+    VIDEO_FILTER = "영상 파일 (*.mp4 *.mkv *.mov *.webm);;모든 파일 (*)"
+
+    def __init__(self, parent, settings):
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle(tr("워터마크 / 인트로·아웃트로"))
+        self.setMinimumWidth(520)
+        lay = QVBoxLayout(self)
+        intro = QLabel(tr("워터마크를 지정하면 모든 영상 출력이 재인코딩됩니다 (출력 mp4). 인트로/아웃트로는 재인코딩되는 출력(정확하게 · 세로 · 캡션 · 자막 · 워터마크)에만 붙습니다. 비워 두면 쓰지 않습니다."))
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        form = QFormLayout()
+        self.ed_wm = self._file_row(form, tr("워터마크 PNG"), settings.value("wm_path", ""), tr("PNG 이미지 (*.png)"))
+        self.cb_pos = QComboBox()
+        for code, label in self.POSITIONS:
+            self.cb_pos.addItem(tr(label), code)
+        idx = self.cb_pos.findData(settings.value("wm_pos", "br"))
+        self.cb_pos.setCurrentIndex(idx if idx >= 0 else 3)
+        form.addRow(tr("워터마크 위치"), self.cb_pos)
+        self.sp_opacity = QDoubleSpinBox()
+        self.sp_opacity.setRange(0.05, 1.0)
+        self.sp_opacity.setSingleStep(0.05)
+        try:
+            self.sp_opacity.setValue(float(settings.value("wm_opacity", 0.8)))
+        except (TypeError, ValueError):
+            self.sp_opacity.setValue(0.8)
+        form.addRow(tr("워터마크 불투명도"), self.sp_opacity)
+        self.ed_intro = self._file_row(form, tr("인트로 영상"), settings.value("intro_path", ""), tr(self.VIDEO_FILTER))
+        self.ed_outro = self._file_row(form, tr("아웃트로 영상"), settings.value("outro_path", ""), tr(self.VIDEO_FILTER))
+        lay.addLayout(form)
+        lay.addWidget(_buttons(self))
+
+    def _file_row(self, form, label: str, value: str, filt: str) -> QLineEdit:
+        row = QHBoxLayout()
+        ed = QLineEdit(value or "")
+        ed.setPlaceholderText(tr("비워 두면 사용 안 함"))
+        btn = QToolButton()
+        btn.setText("…")
+        btn.clicked.connect(lambda: self._pick(ed, label, filt))
+        clr = QToolButton()
+        clr.setText("✕")
+        clr.setToolTip(tr("지우기"))
+        clr.clicked.connect(ed.clear)
+        row.addWidget(ed, 1)
+        row.addWidget(btn)
+        row.addWidget(clr)
+        form.addRow(label, row)
+        return ed
+
+    def _pick(self, ed: QLineEdit, title: str, filt: str):
+        start = os.path.dirname(ed.text()) if ed.text() else ""
+        path, _ = QFileDialog.getOpenFileName(self, title, start, filt)
+        if path:
+            ed.setText(path)
+
+    def save(self):
+        s = self.settings
+        s.setValue("wm_path", self.ed_wm.text().strip())
+        s.setValue("wm_pos", self.cb_pos.currentData() or "br")
+        s.setValue("wm_opacity", f"{self.sp_opacity.value():.2f}")
+        s.setValue("intro_path", self.ed_intro.text().strip())
+        s.setValue("outro_path", self.ed_outro.text().strip())
+        s.sync()

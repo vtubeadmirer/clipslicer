@@ -1,10 +1,13 @@
-"""타임라인 위젯: 썸네일 띠 + 파형 + 구간 블록 + 키프레임 + 자르기 마커 + 플레이헤드.
+"""타임라인 위젯: 썸네일 띠 + 파형 + 채팅 반응 그래프 + 구간 블록 + 키프레임 + 자르기 마커 + 플레이헤드.
 
 확대/축소(Ctrl+휠), 가로 스크롤(휠), 호버 썸네일 미리보기 지원.
+project.chat (app.chat.ChatData) 이 있으면 띠 아래쪽 절반에 주황색 반응 그래프를 겹쳐 그린다.
 """
 from __future__ import annotations
 
 from .i18n import tr
+import math
+
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QPoint, QSize
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont, QPixmap, QLinearGradient
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QScrollBar, QSizePolicy
@@ -164,6 +167,7 @@ class TimelineCanvas(QWidget):
 
         band = QRectF(0, 0, w, THUMB_H)
         self._draw_thumbs(p, band)
+        self._draw_chat(p, band)
         self._draw_waveform(p, band)
         self._draw_segments(p, band)
         self._draw_ruler(p, QRectF(0, THUMB_H, w, RULER_H))
@@ -232,6 +236,59 @@ class TimelineCanvas(QWidget):
         grad.setColorAt(1, QColor(0, 160, 140, 90))
         p.setBrush(QBrush(grad))
         p.drawPolygon(poly)
+
+    def _chat_buckets(self) -> tuple[list, float]:
+        """project.chat (app.chat.ChatData) 의 (buckets, bucket_sec). 없으면 ([], 0)."""
+        chat = getattr(self.project, "chat", None)
+        buckets = getattr(chat, "buckets", None) or []
+        try:
+            bsec = float(getattr(chat, "bucket_sec", 0) or 0)
+        except (TypeError, ValueError):
+            bsec = 0.0
+        return (list(buckets), bsec) if buckets and bsec > 0 else ([], 0.0)
+
+    def _draw_chat(self, p: QPainter, band: QRectF):
+        """채팅 반응 그래프: 썸네일 띠 아래쪽 절반에 주황색 계단형 면 그래프 (가장 바쁜 버킷 = 최대 높이)."""
+        buckets, bsec = self._chat_buckets()
+        if not buckets:
+            return
+        top = max(buckets)
+        if top <= 0:
+            return
+        w = int(band.width())
+        n = len(buckets)
+        bottom = band.bottom()
+        max_h = THUMB_H * 0.5
+        poly = QPolygonF()
+        poly.append(QPointF(0, bottom))
+        edge: list[QPointF] = []
+        for x in range(w):
+            t0 = self.x_to_t(x)
+            t1 = self.x_to_t(x + 1)
+            i0 = min(n - 1, max(0, int(t0 // bsec)))
+            i1 = min(n, max(i0 + 1, int(math.ceil(t1 / bsec))))
+            amp = max(buckets[i0:i1]) / top * max_h
+            pt = QPointF(x, bottom - amp)
+            poly.append(pt)
+            edge.append(pt)
+        poly.append(QPointF(w, bottom))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 167, 38, 130))
+        p.drawPolygon(poly)
+        p.setPen(QPen(QColor(255, 167, 38, 220), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawPolyline(QPolygonF(edge))
+        # 범례
+        font = QFont()
+        font.setPointSize(7)
+        font.setBold(True)
+        p.setFont(font)
+        r = QRectF(4, bottom - max_h - 13, 40, 12)
+        p.setPen(QColor(0, 0, 0, 170))
+        p.drawText(r.translated(1, 1), Qt.AlignLeft | Qt.AlignVCenter, tr("채팅"))
+        p.setPen(QColor(255, 190, 90, 235))
+        p.drawText(r, Qt.AlignLeft | Qt.AlignVCenter, tr("채팅"))
+        p.setPen(Qt.NoPen)
 
     def _draw_segments(self, p: QPainter, band: QRectF):
         segs = self.project.segments
@@ -359,7 +416,13 @@ class TimelineCanvas(QWidget):
         t = self.x_to_t(x)
         pix = self._thumb_for(t) if self.project else None
         gp = self.mapToGlobal(QPoint(int(x), 0))
-        self.popup.show_at(gp, pix, fmt_time(t))
+        text = fmt_time(t)
+        buckets, bsec = self._chat_buckets()
+        if buckets:
+            i = int(t // bsec)
+            if 0 <= i < len(buckets):
+                text += tr("  💬 {0}").format(buckets[i])
+        self.popup.show_at(gp, pix, text)
 
     def mousePressEvent(self, e):
         if not self.project or self.duration <= 0:

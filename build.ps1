@@ -47,6 +47,13 @@ foreach ($pat in @("avcodec-*.dll", "avformat-*.dll", "avfilter-*.dll", "avdevic
   Get-ChildItem $internal -Filter $pat -ErrorAction SilentlyContinue | Remove-Item -Force
 }
 
+# 번들 ffmpeg/libmpv 버전 기록 → _internal\deps.txt. 앱이 릴리스의 deps.txt 와 비교해 같으면 경량 업데이트 zip 만 받는다
+# (app/updater.py choose_asset). release.yml 도 같은 내용을 릴리스 자산 deps.txt 로 올린다. PATH 를 비우기 전에 실행.
+$deps = Join-Path $internal "deps.txt"
+& python -c "import sys; sys.path.insert(0, 'tools'); import get_ffmpeg, get_libmpv; open(sys.argv[1], 'w', newline='\n').write(f'ffmpeg={get_ffmpeg.TAG}\nlibmpv={get_libmpv.TAG}\n')" $deps
+if ($LASTEXITCODE -ne 0) { throw "deps.txt 생성 실패" }
+Write-Host ("deps.txt: " + ((Get-Content $deps) -join ", "))
+
 # 검증: PATH 를 비운 상태에서 번들된 ffmpeg/ffprobe 가 자기 DLL 만으로 뜨는지
 $env:PATH = "$env:SystemRoot\System32"
 foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {

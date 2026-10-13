@@ -12,7 +12,7 @@ import logging
 from PySide6.QtCore import QThread, Signal
 
 from . import ffmpeg_tools, cache
-from .ffmpeg_tools import Cutter, Cancelled
+from .ffmpeg_tools import Cutter, Cancelled, RenderOptions, audio_normalize_args
 
 LOG = logging.getLogger("clipslicer")
 
@@ -295,6 +295,16 @@ class ExportJob:
     vertical: float | None = None    # 세로 9:16 크롭 위치 (None 이면 원본 비율)
     gpu: str | None = None
     note: str = field(default="")
+    # ---- 출력 효과 (키워드 인자, 기본값이면 예전과 같은 동작) ----
+    normalize: bool = False          # 음량 정규화: loudnorm → aac (영상은 복사 가능)
+    caption: str = ""                # 영상에 굽는 캡션 글자 (재인코딩)
+    subtitle_path: str = ""          # 굽는 자막 파일 .srt/.ass (재인코딩, 구간 시작에 맞춰 시각 이동)
+    layout: str = "crop"             # 세로 출력 레이아웃: crop | blur
+    watermark: str = ""              # 워터마크 PNG 경로 (재인코딩)
+    watermark_pos: str = "br"        # tl | tr | bl | br
+    watermark_opacity: float = 0.8
+    intro: str = ""                  # 앞에 붙일 영상 (재인코딩 출력에만)
+    outro: str = ""                  # 뒤에 붙일 영상 (재인코딩 출력에만)
 
     @property
     def label(self) -> str:
@@ -303,6 +313,22 @@ class ExportJob:
     @property
     def total_duration(self) -> float:
         return sum(p.end - p.start for p in self.parts)
+
+    @property
+    def has_overlays(self) -> bool:
+        """캡션 · 자막 · 워터마크 중 하나라도 있으면 (재인코딩이 필요)."""
+        return bool(self.caption.strip() or self.subtitle_path or self.watermark)
+
+    @property
+    def needs_encode(self) -> bool:
+        """비디오를 재인코딩하는 출력인지 (정확하게 · 세로 · 캡션/자막/워터마크). 오디오만 출력은 False."""
+        return not self.audio and (self.mode == "precise" or self.vertical is not None or self.has_overlays)
+
+    def render_options(self, normalize: bool | None = None) -> RenderOptions:
+        return RenderOptions(vertical=self.vertical, layout=self.layout, caption=self.caption,
+                             subtitle_path=self.subtitle_path, watermark=self.watermark,
+                             watermark_pos=self.watermark_pos, watermark_opacity=self.watermark_opacity,
+                             normalize=self.normalize if normalize is None else normalize)
 
 
 class ExportWorker(QThread):
@@ -323,40 +349,64 @@ class ExportWorker(QThread):
             self._cutter.cancel()
 
     # ---- 단일 구간 ----
-    def _cut_one(self, cutter: Cutter, job: ExportJob, part: ExportPart, dst: str, cb) -> str:
-        if job.audio:
-            cutter.cut_audio(job.src, part.start, part.end, dst, job.audio, job.info.get("acodec", ""), cb)
-            return tr("오디오")
+    @staticmethod
+    def _effects_note(job: ExportJob) -> str:
+        names = []
         if job.vertical is not None:
-            cutter.cut_vertical(job.src, part.start, part.end, dst, job.info, job.vertical, cb, job.gpu)
+            names.append(tr("세로 9:16 블러") if job.layout == "blur" else tr("세로 9:16"))
+        if job.caption.strip():
+            names.append(tr("캡션"))
+        if job.subtitle_path:
+            names.append(tr("자막"))
+        if job.watermark:
+            names.append(tr("워터마크"))
+        return tr("재인코딩") + (f" ({', '.join(names)})" if names else "")
+
+    def _cut_one(self, cutter: Cutter, job: ExportJob, part: ExportPart, dst: str, cb,
+                 normalize: bool | None = None) -> str:
+        """구간 하나를 dst 로. normalize 를 넘기면 작업 설정 대신 그 값을 쓴다 (합치기는 마지막 단계에서 한 번만)."""
+        norm = job.normalize if normalize is None else normalize
+        if job.audio:
+            cutter.cut_audio(job.src, part.start, part.end, dst, job.audio, job.info.get("acodec", ""), cb, normalize=norm)
+            return tr("오디오")
+        if job.has_overlays or (job.vertical is not None and job.layout == "blur"):
+            cutter.cut_render(job.src, part.start, part.end, dst, job.info, job.render_options(norm), cb, job.gpu)
+            return self._effects_note(job)
+        if job.vertical is not None:
+            cutter.cut_vertical(job.src, part.start, part.end, dst, job.info, job.vertical, cb, job.gpu, normalize=norm)
             return tr("세로 9:16")
         if job.mode == "precise":
-            cutter.cut_encode(job.src, part.start, part.end, dst, cb, "h264", job.gpu)
+            cutter.cut_encode(job.src, part.start, part.end, dst, cb, "h264", job.gpu,
+                              audio_args=audio_normalize_args() if norm else None)
             return tr("재인코딩")
         if job.mode == "smart":
-            how = cutter.cut_smart(job.src, part.start, part.end, dst, job.info, job.keyframes, cb, job.gpu)
+            how = cutter.cut_smart(job.src, part.start, part.end, dst, job.info, job.keyframes, cb, job.gpu, normalize=norm)
             return {"copy": tr("복사"), "smart": tr("스마트"), "encode": tr("재인코딩")}.get(how, how)
-        cutter.cut_copy(job.src, part.start, part.end, dst, cb)
-        return tr("복사")
+        cutter.cut_copy(job.src, part.start, part.end, dst, cb, normalize=norm)
+        return tr("복사") + (tr(" + 음량 정규화") if norm else "")
 
     # ---- 합치기 ----
-    def _merge(self, i: int, cutter: Cutter, job: ExportJob) -> str:
+    def _merge(self, i: int, cutter: Cutter, job: ExportJob, dst: str | None = None, cb=None,
+               normalize: bool | None = None) -> str:
+        """여러 구간을 dst 하나로. 조각은 정규화 없이 만들고 마지막 concat 에서 한 번만 정규화한다."""
         total = job.total_duration
-        cb = lambda p: self.jobProgress.emit(i, p)  # noqa: E731
-        if job.mode == "fast" and not job.audio and job.vertical is None:
+        dst = dst or job.dst
+        cb = cb or (lambda p: self.jobProgress.emit(i, p))
+        norm = job.normalize if normalize is None else normalize
+        if job.mode == "fast" and not job.audio and not job.needs_encode:
             # 원본에서 구간들을 바로 읽어 한 번에 이어 붙인다 (임시 파일 없음)
-            cutter.concat([(job.src, p.start, p.end) for p in job.parts], job.dst, cb, total)
+            cutter.concat([(job.src, p.start, p.end) for p in job.parts], dst, cb, total, normalize=norm)
             return tr("{0}개 구간 합침").format(len(job.parts))
         tmp = tempfile.mkdtemp(prefix="clipslicer_merge_")
         try:
-            ext = os.path.splitext(job.dst)[1]
+            ext = os.path.splitext(dst)[1]
             entries: list = []
             done = 0.0
             heads = 0
             for n, part in enumerate(job.parts):
                 plen = part.end - part.start
-                prog = lambda p, d=done, l=plen: self.jobProgress.emit(i, 0.9 * (d + p * l) / total)  # noqa: E731
-                if job.mode == "smart" and not job.audio and job.vertical is None:
+                prog = lambda p, d=done, l=plen: cb(0.9 * (d + p * l) / total)  # noqa: E731
+                if job.mode == "smart" and not job.audio and not job.needs_encode:
                     plan = Cutter.smart_plan(job.info, job.keyframes, part.start, part.end)
                     if plan is not None and plan[2] is None:
                         entries.append((job.src, part.start, part.end))          # 키프레임에서 시작 → 그대로
@@ -372,13 +422,18 @@ class ExportWorker(QThread):
                         entries.append(f)
                 else:
                     f = os.path.join(tmp, f"part{n:03d}{ext}")
-                    self._cut_one(cutter, job, part, f, prog)
+                    self._cut_one(cutter, job, part, f, prog, normalize=False)
                     entries.append(f)
                 done += plen
-            cutter.concat(entries, job.dst, lambda p: self.jobProgress.emit(i, 0.9 + 0.1 * p), total)
+            cutter.concat(entries, dst, lambda p: cb(0.9 + 0.1 * p), total, normalize=norm)
             return tr("{0}개 구간 합침").format(len(job.parts)) + (tr(", 앞조각 {0}개 재인코딩").format(heads) if heads else "")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def _export_main(self, i: int, cutter: Cutter, job: ExportJob, dst: str, cb, normalize: bool | None = None) -> str:
+        if len(job.parts) == 1:
+            return self._cut_one(cutter, job, job.parts[0], dst, cb, normalize)
+        return self._merge(i, cutter, job, dst, cb, normalize)
 
     def _run_job(self, i: int, job: ExportJob) -> str:
         cutter = Cutter()
@@ -387,11 +442,35 @@ class ExportWorker(QThread):
             if job.mode == "smart" and not job.keyframes and not job.audio:
                 # 키프레임 분석이 아직 안 끝났으면 지금 한다 (없으면 전체 재인코딩으로 빠져 느려짐)
                 job.keyframes = ffmpeg_tools.keyframes(job.src)
-            if len(job.parts) == 1:
-                return self._cut_one(cutter, job, job.parts[0], job.dst, lambda p: self.jobProgress.emit(i, p))
-            return self._merge(i, cutter, job)
+            extras = [p for p in (job.intro, job.outro) if p]
+            if extras and not job.needs_encode:
+                LOG.info("인트로/아웃트로는 재인코딩 출력(정확하게·세로·캡션·자막·워터마크)에만 붙입니다 — 건너뜀: %s", job.dst)
+                extras = []
+            if not extras:
+                return self._export_main(i, cutter, job, job.dst, lambda p: self.jobProgress.emit(i, p))
+            # 본편을 임시로 만든 뒤 인트로/아웃트로와 같은 규격으로 다시 인코딩해 이어 붙인다 (정규화는 이때 한 번만)
+            tmp = tempfile.mkdtemp(prefix="clipslicer_intro_")
+            try:
+                main = os.path.join(tmp, "main" + (os.path.splitext(job.dst)[1] or ".mp4"))
+                note = self._export_main(i, cutter, job, main, lambda p: self.jobProgress.emit(i, 0.8 * p), normalize=False)
+                m = ffmpeg_tools.probe(main)
+                files = [f for f in (job.intro, main, job.outro) if f]
+                cutter.concat_render(files, job.dst, lambda p: self.jobProgress.emit(i, 0.8 + 0.2 * p),
+                                     size=(m["width"], m["height"]), fps=m["fps"], gpu=job.gpu, normalize=job.normalize)
+                return note + tr(", 인트로/아웃트로 붙임")
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
         finally:
             self._cutter = None
+
+    @staticmethod
+    def _drop_missing_files(job: ExportJob):
+        """없는 자막 · 워터마크 · 인트로 · 아웃트로 파일은 경고만 남기고 무시한다."""
+        for name in ("subtitle_path", "watermark", "intro", "outro"):
+            p = getattr(job, name)
+            if p and not os.path.isfile(p):
+                LOG.warning("%s 파일이 없어 무시: %s", name, p)
+                setattr(job, name, "")
 
     def run(self):
         ok_n = fail_n = 0
@@ -399,8 +478,13 @@ class ExportWorker(QThread):
             if self._cancel:
                 break
             self.jobStarted.emit(i, job.label)
-            LOG.info("내보내기 [%d/%d] %s mode=%s audio=%s parts=%d gpu=%s", i + 1, len(self.jobs), job.dst,
-                     job.mode, job.audio or "-", len(job.parts), job.gpu)
+            self._drop_missing_files(job)
+            LOG.info("내보내기 [%d/%d] %s mode=%s audio=%s parts=%d gpu=%s normalize=%s caption=%s subtitle=%s "
+                     "layout=%s watermark=%s intro=%s outro=%s", i + 1, len(self.jobs), job.dst,
+                     job.mode, job.audio or "-", len(job.parts), job.gpu, job.normalize, bool(job.caption.strip()),
+                     job.subtitle_path or "-", job.layout, job.watermark or "-", job.intro or "-", job.outro or "-")
+            if job.has_overlays and job.mode != "precise":
+                LOG.info("캡션/자막/워터마크는 재인코딩이 필요해 '%s' 대신 '정확하게' 방식으로 처리: %s", job.mode, job.dst)
             os.makedirs(os.path.dirname(job.dst) or ".", exist_ok=True)
             try:
                 note = self._run_job(i, job)

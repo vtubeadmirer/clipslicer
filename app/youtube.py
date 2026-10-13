@@ -8,6 +8,7 @@ from __future__ import annotations
 from .i18n import tr
 import base64
 import ctypes
+import datetime
 import hashlib
 import http.server
 import json
@@ -441,6 +442,16 @@ def fill_template(template: str, values: dict) -> str:
         return template.format_map(_D(values))
     except (ValueError, IndexError):
         return template
+
+
+def to_rfc3339_utc(dt: datetime.datetime) -> str:
+    """예약 공개 시각 → YouTube 가 받는 RFC3339 UTC 문자열 ('2030-01-01T00:00:00Z').
+
+    tz 가 없는(naive) datetime 은 로컬 시각으로 본다. tz 가 붙어 있으면 그대로 UTC 로 바꾼다.
+    """
+    if dt.tzinfo is None:
+        dt = dt.astimezone()  # naive → 시스템 로컬 시간대
+    return dt.astimezone(datetime.timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # --------------------------------------------------------------------------- 올리기 전 검사 / 할당량

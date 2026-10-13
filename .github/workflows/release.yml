@@ -3,6 +3,12 @@ name: Release (exe 빌드)
 # v0.2.0 처럼 v 로 시작하는 태그를 push 하면 exe 를 빌드해서 Release 에 올린다.
 #   git tag v0.2.0 && git push origin v0.2.0
 # Actions 탭에서 "Run workflow" 로 수동 실행하면 Release 없이 artifact 만 만든다.
+#
+# 올라가는 파일:
+#   ClipSlicer-<ver>-win64.zip (+ .sha256)         전체 (ffmpeg · libmpv 포함, 약 170MB)
+#   ClipSlicer-<ver>-win64-update.zip (+ .sha256)  경량 업데이트 (ffmpeg\ 와 libmpv-2.dll 제외, 약 20MB)
+#   deps.txt                                       번들 ffmpeg/libmpv 버전 — 앱이 로컬 _internal\deps.txt 와 비교해
+#                                                  같으면 경량 zip 만 받는다 (app/updater.py choose_asset)
 on:
   push:
     tags: ["v*"]
@@ -46,29 +52,62 @@ jobs:
         shell: pwsh
         run: .\build.ps1
 
-      - name: zip 묶기
+      - name: deps.txt 생성 (번들 ffmpeg/libmpv 버전)
+        shell: pwsh
+        run: |
+          # tools/get_ffmpeg.py · tools/get_libmpv.py 의 고정 TAG 를 읽어 "ffmpeg=<tag>" / "libmpv=<tag>" 두 줄로 쓴다
+          python -c "import sys; sys.path.insert(0, 'tools'); import get_ffmpeg, get_libmpv; open('deps.txt', 'w', newline='\n').write(f'ffmpeg={get_ffmpeg.TAG}\nlibmpv={get_libmpv.TAG}\n')"
+          Get-Content deps.txt
+          Copy-Item deps.txt dist\ClipSlicer\_internal\deps.txt -Force
+
+      - name: zip 묶기 (전체 + 경량 업데이트)
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}"
           if ($ver -notlike "v*") { $ver = "dev-" + "${{ github.sha }}".Substring(0, 7) }
-          Compress-Archive -Path dist\ClipSlicer -DestinationPath "ClipSlicer-$ver-win64.zip"
-          $hash = (Get-FileHash "ClipSlicer-$ver-win64.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash *ClipSlicer-$ver-win64.zip" | Out-File -FilePath "ClipSlicer-$ver-win64.zip.sha256" -Encoding ascii
-          "ZIP=ClipSlicer-$ver-win64.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "SHA=ClipSlicer-$ver-win64.zip.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $zip = "ClipSlicer-$ver-win64.zip"
+          $upd = "ClipSlicer-$ver-win64-update.zip"
+
+          Compress-Archive -Path dist\ClipSlicer -DestinationPath $zip
+
+          # 경량 업데이트 zip: 전체 폴더 사본에서 _internal\ffmpeg\ 와 _internal\libmpv-2.dll 만 뺀다
+          New-Item -ItemType Directory -Force lite | Out-Null
+          Copy-Item dist\ClipSlicer -Destination lite -Recurse
+          Remove-Item lite\ClipSlicer\_internal\ffmpeg -Recurse -Force
+          Remove-Item lite\ClipSlicer\_internal\libmpv-2.dll -Force
+          if (Test-Path lite\ClipSlicer\_internal\ffmpeg) { throw "경량 zip 에 ffmpeg 가 남아 있습니다" }
+          if (-not (Test-Path lite\ClipSlicer\_internal\deps.txt)) { throw "경량 zip 에 deps.txt 가 없습니다" }
+          Compress-Archive -Path lite\ClipSlicer -DestinationPath $upd
+
+          foreach ($f in @($zip, $upd)) {
+            $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+            "$hash *$f" | Out-File -FilePath "$f.sha256" -Encoding ascii
+            Write-Host ("{0}  {1:N1} MB" -f $f, ((Get-Item $f).Length / 1MB))
+          }
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHA=$zip.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "UPD=$upd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "UPD_SHA=$upd.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - uses: actions/upload-artifact@v4
         with:
           name: ClipSlicer-win64
           path: |
+            ${{ env.UPD }}
+            ${{ env.UPD_SHA }}
             ${{ env.ZIP }}
             ${{ env.SHA }}
+            deps.txt
 
       - name: GitHub Release 생성
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          # 0.7.0 이하 업데이터는 '마지막 .sha256' 을 전체 zip 의 것으로 보므로 전체 zip 의 sha 를 반드시 마지막에 올린다
           files: |
+            ${{ env.UPD }}
+            ${{ env.UPD_SHA }}
             ${{ env.ZIP }}
             ${{ env.SHA }}
+            deps.txt
           generate_release_notes: true
