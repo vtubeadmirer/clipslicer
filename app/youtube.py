@@ -440,3 +440,55 @@ def fill_template(template: str, values: dict) -> str:
         return template.format_map(_D(values))
     except (ValueError, IndexError):
         return template
+
+
+# --------------------------------------------------------------------------- 올리기 전 검사 / 할당량
+MAX_DURATION = 12 * 3600          # 유튜브: 12시간
+MAX_SIZE = 256 * 1024 ** 3        # 유튜브: 256 GB
+SHORTS_MAX = 180                  # 쇼츠: 3분
+DAILY_UPLOADS = 6                 # API 할당량 10,000 / 업로드 1,600
+
+
+def check_upload(path: str, duration: float, size: int, shorts: bool = False) -> tuple[list[str], list[str]]:
+    """(막아야 할 오류 목록, 경고 목록)."""
+    name = os.path.basename(path)
+    errors, warns = [], []
+    if duration > MAX_DURATION:
+        errors.append(f"{name}: 길이 {duration / 3600:.1f}시간 — 유튜브는 12시간까지만 올릴 수 있습니다. ClipSlicer 에서 나눠서 올리세요.")
+    if size > MAX_SIZE:
+        errors.append(f"{name}: 크기 {size / 1024 ** 3:.0f} GB — 유튜브는 256 GB 까지입니다.")
+    if size <= 0:
+        errors.append(f"{name}: 비어 있는 파일입니다.")
+    if shorts and duration > SHORTS_MAX:
+        warns.append(f"{name}: {duration / 60:.1f}분 — 쇼츠는 3분까지라 일반 영상으로 올라갑니다.")
+    if duration > 15 * 60:
+        warns.append(f"{name}: 15분을 넘는 영상은 채널이 전화 인증되어 있어야 올라갑니다.")
+    return errors, warns
+
+
+def quota_day() -> str:
+    """할당량이 초기화되는 기준(미국 태평양 시간)의 날짜 문자열."""
+    import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.datetime.now(ZoneInfo("America/Los_Angeles"))
+    except Exception:  # tzdata 없음
+        now = datetime.datetime.utcnow() - datetime.timedelta(hours=8)
+    return now.strftime("%Y-%m-%d")
+
+
+def uploads_today(settings) -> int:
+    if settings.value("yt_quota_day", "") != quota_day():
+        return 0
+    try:
+        return int(settings.value("yt_quota_count", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def record_upload(settings):
+    day = quota_day()
+    n = uploads_today(settings) + 1
+    settings.setValue("yt_quota_day", day)
+    settings.setValue("yt_quota_count", n)
+    return n

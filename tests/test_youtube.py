@@ -58,3 +58,34 @@ def test_dpapi_roundtrip():
     enc = yt.protect(data)
     assert enc != data and b"refresh_token" not in enc
     assert yt.unprotect(enc) == data
+
+
+def test_check_upload_limits():
+    e, w = yt.check_upload("a.mp4", 13 * 3600, 10, False)
+    assert len(e) == 1 and "12시간" in e[0]
+    e, w = yt.check_upload("a.mp4", 60, 300 * 1024 ** 3, False)
+    assert "256 GB" in e[0]
+    e, w = yt.check_upload("a.mp4", 240, 10, True)
+    assert not e and any("쇼츠" in x for x in w)
+    e, w = yt.check_upload("a.mp4", 20 * 60, 10, False)
+    assert not e and any("15분" in x for x in w)
+    e, w = yt.check_upload("a.mp4", 60, 0, False)
+    assert any("비어" in x for x in e)
+    assert yt.check_upload("a.mp4", 60, 10, False) == ([], [])
+
+
+def test_quota_tracking():
+    class S(dict):
+        def value(self, k, d=None):
+            return self.get(k, d)
+
+        def setValue(self, k, v):
+            self[k] = v
+
+    s = S()
+    assert yt.uploads_today(s) == 0
+    assert yt.record_upload(s) == 1 and yt.record_upload(s) == 2
+    assert yt.uploads_today(s) == 2
+    s["yt_quota_day"] = "2000-01-01"
+    assert yt.uploads_today(s) == 0
+    assert len(yt.quota_day()) == 10

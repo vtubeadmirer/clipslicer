@@ -344,11 +344,49 @@ class UploadDialog(QDialog):
         self._pl_worker = w
 
     # ---- 업로드 ----
-    def _start(self):
+    def _precheck(self) -> bool:
+        """길이·크기·쇼츠·할당량 검사. 올려도 되면 True."""
+        from . import ffmpeg_tools
+        errors, warns = [], []
         for it in self.items:
             if not it.title.strip():
-                QMessageBox.warning(self, "제목", f"제목이 비어 있습니다: {os.path.basename(it.path)}")
-                return
+                errors.append(f"제목이 비어 있습니다: {os.path.basename(it.path)}")
+                continue
+            if not os.path.isfile(it.path):
+                errors.append(f"파일이 없습니다: {it.path}")
+                continue
+            try:
+                dur = ffmpeg_tools.probe(it.path)["duration"]
+            except Exception:
+                dur = 0.0
+            e, w = yt.check_upload(it.path, dur, os.path.getsize(it.path), self.cb_shorts.isChecked())
+            errors += e
+            warns += w
+        if errors:
+            QMessageBox.critical(self, "올릴 수 없는 파일", "\n\n".join(errors[:8]))
+            return False
+        used = yt.uploads_today(self.settings)
+        n = len(self.items)
+        if used + n > yt.DAILY_UPLOADS:
+            warns.insert(0, f"오늘 API 할당량으로 올릴 수 있는 건수는 약 {yt.DAILY_UPLOADS}개이고 이미 {used}개를 올렸습니다. "
+                            f"지금 {n}개를 올리면 {max(0, yt.DAILY_UPLOADS - used)}개까지만 성공하고 나머지는 '할당량 초과'로 실패할 수 있습니다. "
+                            "(할당량은 한국 시간 오후 4~5시쯤 초기화)")
+        if warns:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Warning)
+            box.setWindowTitle("올리기 전 확인")
+            box.setText("\n\n".join(warns[:8]) + "\n\n그래도 올릴까요?")
+            box.addButton("올리기", QMessageBox.AcceptRole)
+            cancel = box.addButton("취소", QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() is cancel:
+                return False
+        return True
+
+    def _start(self):
+        if not self._precheck():
+            return
+        for it in self.items:
             if self.cb_shorts.isChecked() and "#shorts" not in it.title.lower():
                 it.title = (it.title + " #Shorts")[:100]
         self.settings.setValue("yt_category", self.cb_cat.currentData())
@@ -369,7 +407,9 @@ class UploadDialog(QDialog):
     def _on_item(self, i: int, vid: str, err: str):
         it = self.items[i]
         if vid:
-            self.log.appendPlainText(f"✔ {os.path.basename(it.path)} → {yt.video_url(vid)}" + (f"  ({err})" if err else ""))
+            n = yt.record_upload(self.settings)
+            self.log.appendPlainText(f"✔ {os.path.basename(it.path)} → {yt.video_url(vid)}" + (f"  ({err})" if err else "")
+                                     + f"   (오늘 {n}/{yt.DAILY_UPLOADS})")
             self.list.item(i).setText("✔ " + os.path.basename(it.path))
         else:
             self.log.appendPlainText(f"✖ {os.path.basename(it.path)}: {err}")
