@@ -552,7 +552,7 @@ class MainWindow(QMainWindow):
         self.act_cache = QAction("분석 결과 캐시 저장 (.clipslicer.cache)", self, checkable=True, checked=True)
         self.act_cache.setToolTip("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다")
         m_set.addAction(self.act_cache)
-        self.act_update = QAction("시작할 때 새 버전 확인 (하루 1회, GitHub 조회)", self, checkable=True, checked=True)
+        self.act_update = QAction("시작할 때 새 버전 확인 (GitHub 조회)", self, checkable=True, checked=True)
         m_set.addAction(self.act_update)
         self.act_compat = QAction("호환 모드 — 화면이 검게 나올 때 (재시작 필요)", self, checkable=True)
         self.act_compat.setChecked(self.settings.value("compat_mode", "0") == "1")
@@ -1294,11 +1294,15 @@ class MainWindow(QMainWindow):
     def _auto_check_updates(self):
         if not self.act_update.isChecked():
             return
-        import datetime
-        today = datetime.date.today().isoformat()
-        if self.settings.value("last_update_check", "") == today:
+        import time
+        # 시작할 때마다 확인하되 1시간 안에는 다시 묻지 않는다 (같은 날 나온 새 버전도 바로 보이게)
+        try:
+            last = float(self.settings.value("last_update_check_ts", 0) or 0)
+        except (TypeError, ValueError):
+            last = 0.0
+        if time.time() - last < 3600:
             return
-        self.settings.setValue("last_update_check", today)
+        self.settings.setValue("last_update_check_ts", time.time())
         self.check_updates(manual=False)
 
     def check_updates(self, manual: bool):
