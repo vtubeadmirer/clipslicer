@@ -1633,7 +1633,13 @@ class MainWindow(QMainWindow):
             self._apply_update(d.new_dir)
 
     def _apply_update(self, new_dir: str):
-        if QMessageBox.question(self, tr("업데이트"), tr("프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다.\n계속할까요?")) != QMessageBox.Yes:
+        others = updater.other_instances()
+        if others:
+            QMessageBox.warning(self, tr("업데이트"), tr("같은 폴더에서 ClipSlicer 창이 {0}개 더 열려 있습니다.\n"
+                                                      "그 창들을 모두 닫은 뒤 다시 업데이트해 주세요 (열려 있으면 파일이 잠겨 교체가 실패합니다).").format(len(others)))
+            return
+        if QMessageBox.question(self, tr("업데이트"), tr("프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다 (보통 10~30초).\n"
+                                                      "다시 열릴 때까지 ClipSlicer 를 직접 실행하지 마세요.\n계속할까요?")) != QMessageBox.Yes:
             return
         try:
             updater.launch_replacer(new_dir, lite=updater.is_lite_dir(new_dir))
@@ -1648,6 +1654,9 @@ class MainWindow(QMainWindow):
         if flag == "--updated":
             self.statusBar().showMessage(tr("업데이트 완료 — ClipSlicer {0}").format(__version__), 10000)
             LOG.info("업데이트 완료 후 재시작")
+        elif flag == "--update-blocked":
+            QMessageBox.warning(self, tr("업데이트 보류"), tr("다른 ClipSlicer 창이 열려 있어 업데이트를 적용하지 않았습니다.\n"
+                                                         "모든 ClipSlicer 창을 닫고 다시 업데이트해 주세요."))
         elif flag == "--update-failed":
             QMessageBox.warning(self, tr("업데이트 실패"), tr("파일 교체에 실패해 이전 버전으로 되돌렸습니다.\nlogs\\update.log 를 확인해 주세요."))
 

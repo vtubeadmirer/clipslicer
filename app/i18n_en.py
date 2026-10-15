@@ -703,4 +703,10 @@ EN = {
     "페이지 축소 (Ctrl+-)": "Zoom out (Ctrl+-)",
     "원래 크기 (Ctrl+0)": "Actual size (Ctrl+0)",
     "페이지 확대 (Ctrl+=)": "Zoom in (Ctrl+=)",
+    # ---- 업데이트 안정화 (0.9.5)
+    '같은 폴더에서 ClipSlicer 창이 {0}개 더 열려 있습니다.\n그 창들을 모두 닫은 뒤 다시 업데이트해 주세요 (열려 있으면 파일이 잠겨 교체가 실패합니다).': '{0} more ClipSlicer window(s) are running from this folder.\nClose them all and update again (open windows lock the files and the replacement fails).',
+    '프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다 (보통 10~30초).\n다시 열릴 때까지 ClipSlicer 를 직접 실행하지 마세요.\n계속할까요?': 'The app will close, replace its files and reopen (usually 10–30 s).\nDo not start ClipSlicer yourself until it reopens.\nContinue?',
+    '업데이트 보류': 'Update postponed',
+    '다른 ClipSlicer 창이 열려 있어 업데이트를 적용하지 않았습니다.\n모든 ClipSlicer 창을 닫고 다시 업데이트해 주세요.': 'Another ClipSlicer window was open, so the update was not applied.\nClose all ClipSlicer windows and update again.',
+    '업데이트를 적용하는 중입니다. 끝나면 자동으로 다시 열립니다.\n잠시 뒤에 다시 실행해 주세요.': 'An update is being applied. ClipSlicer will reopen automatically when it is done.\nPlease try again in a moment.',
 }

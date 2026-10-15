@@ -55,6 +55,15 @@ def main():
     setup_logging(__version__)
     set_language(make_settings().value("lang", "auto"))
 
+    from app import updater
+    if "--updated" in sys.argv:
+        updater.restore_user_data()  # 옛 버전의 교체 스크립트가 지운 유튜브 연결·로그인 등을 백업에서 되살림
+    if updater.update_in_progress() and not any(f in sys.argv for f in ("--updated", "--update-failed", "--update-blocked")):
+        # 교체 스크립트가 이 폴더의 파일을 바꾸는 중: 지금 뜨면 파일을 잠가 교체가 실패한다
+        LOG.warning("업데이트 적용 중이라 실행하지 않음")
+        QMessageBox.information(None, "ClipSlicer", tr("업데이트를 적용하는 중입니다. 끝나면 자동으로 다시 열립니다.\n잠시 뒤에 다시 실행해 주세요."))
+        return 0
+
     missing = missing_tools()
     if missing:
         LOG.error("필수 파일 없음: %s", missing)
@@ -85,7 +94,7 @@ def main():
     files = [a for a in sys.argv[1:] if os.path.exists(a)]
     if files:
         win.add_files(files)
-    for flag in ("--updated", "--update-failed"):
+    for flag in ("--updated", "--update-failed", "--update-blocked"):
         if flag in sys.argv[1:]:
             win.notify_startup_flag(flag)
     return app.exec()

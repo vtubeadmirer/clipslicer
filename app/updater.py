@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import zipfile
 
@@ -325,12 +326,78 @@ def find_app_dir(root: str) -> str | None:
 
 # --------------------------------------------------------------------------- 교체 스크립트
 # -Keep: 경량 업데이트 — robocopy /MIR 에서 ffmpeg\ 와 libmpv-2.dll 을 제외해 새 폴더에 없어도 지우지 않는다.
-REPLACER = ("\n# ClipSlicer 업데이트 교체 스크립트 (자동 생성)\nparam([int]$ProcId, [string]$App, [string]$New, [string]$Exe, [switch]$Keep)\n$ErrorActionPreference = \"Continue\"\n$log = Join-Path $App \"logs\\update.log\"\nNew-Item -ItemType Directory -Force (Split-Path $log) | Out-Null\nfunction Log($m) { \"[{0}] {1}\" -f (Get-Date -Format \"yyyy-MM-dd HH:mm:ss\"), $m | Out-File -FilePath $log -Append -Encoding utf8 }\nLog \"교체 시작 pid=$ProcId app=$App new=$New keep=$Keep\"\ntry { Wait-Process -Id $ProcId -Timeout 60 -ErrorAction Stop } catch { }\nStart-Sleep -Milliseconds 800\n$keepDirs = @(\"_backup\", \"logs\")\n$keepFiles = @(\"settings.ini\")\nif ($Keep) { $keepDirs += @(\"ffmpeg\"); $keepFiles += @(\"libmpv-2.dll\"); Log \"경량 교체: ffmpeg\\, libmpv-2.dll 유지\" }\n$backup = Join-Path $App \"_backup\"\nLog \"백업\"\n& robocopy $App $backup /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\nLog \"교체\"\n& robocopy $New $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null\n$rc = $LASTEXITCODE\nif ($rc -ge 8) {\n  Log \"실패 rc=$rc → 백업에서 복구\"\n  & robocopy $backup $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\n  Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList \"--update-failed\" -WorkingDirectory $App\n  exit 1\n}\nLog \"성공 rc=$rc\"\nRemove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue\nRemove-Item -LiteralPath (Split-Path $New) -Recurse -Force -ErrorAction SilentlyContinue\nStart-Process -FilePath (Join-Path $App $Exe) -ArgumentList \"--updated\" -WorkingDirectory $App\nexit 0\n")
+REPLACER = '\n# ClipSlicer 업데이트 교체 스크립트 (자동 생성)\nparam([int]$ProcId, [string]$App, [string]$New, [string]$Exe, [switch]$Keep, [int]$WaitSec = 120)\n$ErrorActionPreference = "Continue"\n$log = Join-Path $App "logs\\update.log"\n$lock = Join-Path $App "_updating.lock"\nNew-Item -ItemType Directory -Force (Split-Path $log) | Out-Null\nfunction Log($m) { "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m | Out-File -FilePath $log -Append -Encoding utf8 }\nfunction Under-App { Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($App, [System.StringComparison]::OrdinalIgnoreCase) } }\nLog "교체 시작 pid=$ProcId app=$App new=$New keep=$Keep"\n"$PID" | Out-File -FilePath $lock -Encoding ascii\ntry { Wait-Process -Id $ProcId -Timeout 60 -ErrorAction Stop } catch { }\n# 이 폴더에서 실행 중인 프로세스가 남아 있으면 파일이 잠겨 교체가 실패한다 (rc=11).\n# 내장 브라우저·ffmpeg 같은 보조 프로세스는 정리하고, 다른 ClipSlicer 창은 닫힐 때까지 기다린다.\n$deadline = (Get-Date).AddSeconds($WaitSec)\n$warned = $false\nwhile ($true) {\n  $procs = @(Under-App)\n  $helpers = @($procs | Where-Object { $_.ProcessName -ne [System.IO.Path]::GetFileNameWithoutExtension($Exe) })\n  foreach ($h in $helpers) { Log ("보조 프로세스 정리: {0} ({1})" -f $h.ProcessName, $h.Id); Stop-Process -Id $h.Id -Force -ErrorAction SilentlyContinue }\n  $apps = @($procs | Where-Object { $_.ProcessName -eq [System.IO.Path]::GetFileNameWithoutExtension($Exe) })\n  if ($apps.Count -eq 0) { break }\n  if (-not $warned) { Log ("다른 ClipSlicer 창이 열려 있어 닫힐 때까지 기다림: " + (($apps | ForEach-Object { $_.Id }) -join ", ")); $warned = $true }\n  if ((Get-Date) -gt $deadline) {\n    Log "중단: 다른 ClipSlicer 창이 계속 열려 있어 아무 파일도 바꾸지 않음"\n    Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue\n    Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList "--update-blocked" -WorkingDirectory $App\n    exit 2\n  }\n  Start-Sleep -Milliseconds 700\n}\nStart-Sleep -Milliseconds 500\n# 프로그램 폴더에 있는 사용자 데이터는 /MIR 이 지우지 않게 반드시 제외한다\n# (설정, 로그, 내장 브라우저 로그인, 유튜브 연결, 북마크·업로드 기록, 샘플)\n$keepDirs = @("_backup", "logs", "web_profile", "samples")\n$keepFiles = @("settings.ini", "_updating.lock", "youtube_token.bin", "youtube_client_secret.json", "*.jsonl")\nif ($Keep) { $keepDirs += @("ffmpeg"); $keepFiles += @("libmpv-2.dll"); Log "경량 교체: ffmpeg\\, libmpv-2.dll 유지" }\n$backup = Join-Path $App "_backup"\nLog "백업"\n& robocopy $App $backup /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\nLog "교체"\n& robocopy $New $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\n$rc = $LASTEXITCODE\nif ($rc -ge 8) {\n  Log "실패 rc=$rc → 백업에서 복구"\n  & robocopy $backup $App /MIR /XD $keepDirs /XF $keepFiles /NFL /NDL /NJH /NJS /R:2 /W:1 | Out-Null\n  Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue\n  Start-Process -FilePath (Join-Path $App $Exe) -ArgumentList "--update-failed" -WorkingDirectory $App\n  exit 1\n}\nLog "성공 rc=$rc"\nRemove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue\n# 압축을 풀었던 임시 폴더(ClipSlicer-update 아래 new)만 지운다. 이름이 다르면 손대지 않는다.\n$parent = Split-Path $New\nif ((Split-Path $parent -Leaf) -eq "new" -and (Split-Path (Split-Path $parent) -Leaf) -eq "ClipSlicer-update") {\n  Remove-Item -LiteralPath $parent -Recurse -Force -ErrorAction SilentlyContinue\n}\nRemove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue\nStart-Process -FilePath (Join-Path $App $Exe) -ArgumentList "--updated" -WorkingDirectory $App\nexit 0\n'
 
 
 def write_replacer(path: str):
-    with open(path, "w", encoding="utf-8-sig") as f:
-        f.write(REPLACER.strip() + "\n")
+    # BOM 을 직접 붙인다. 업데이트 도중 다른 창이 실행되면서 'utf-8-sig' 코덱 로드가 실패한 적이 있다
+    # (LookupError: unknown encoding: utf-8-sig). 'utf-8' 은 인터프리터가 항상 들고 있어 안전하다.
+    with open(path, "wb") as f:
+        f.write(b"\xef\xbb\xbf" + (REPLACER.strip() + "\n").encode("utf-8"))
+
+
+LOCK_NAME = "_updating.lock"
+USER_FILES = ("youtube_token.bin", "youtube_client_secret.json", "bookmarks.jsonl", "youtube_uploads.jsonl")
+USER_DIRS = ("web_profile", "samples")
+
+
+def restore_user_data(app_dir: str | None = None) -> list[str]:
+    """0.9.4 이하의 교체 스크립트는 /MIR 로 프로그램 폴더의 사용자 데이터를 지웠다.
+    지워졌고 _backup 에는 남아 있으면 되살린다 (덮어쓰지 않음). 되살린 이름 목록을 돌려준다."""
+    app_dir = app_dir or base_dir()
+    backup = os.path.join(app_dir, "_backup")
+    if not os.path.isdir(backup):
+        return []
+    restored = []
+    for name in USER_FILES:
+        src, dst = os.path.join(backup, name), os.path.join(app_dir, name)
+        if os.path.isfile(src) and not os.path.exists(dst):
+            try:
+                shutil.copy2(src, dst)
+                restored.append(name)
+            except OSError:
+                LOG.warning("사용자 데이터 복구 실패: %s", name, exc_info=True)
+    for name in USER_DIRS:
+        src, dst = os.path.join(backup, name), os.path.join(app_dir, name)
+        if os.path.isdir(src) and not os.path.exists(dst):
+            try:
+                shutil.copytree(src, dst)
+                restored.append(name)
+            except OSError:
+                LOG.warning("사용자 데이터 복구 실패: %s", name, exc_info=True)
+    if restored:
+        LOG.info("업데이트로 지워진 사용자 데이터를 _backup 에서 복구: %s", ", ".join(restored))
+    return restored
+
+
+def update_in_progress(app_dir: str | None = None, max_age: float = 600.0) -> bool:
+    """교체 스크립트가 지금 이 폴더를 바꾸는 중인가 (잠금 파일이 있고 10분이 안 지남)."""
+    p = os.path.join(app_dir or base_dir(), LOCK_NAME)
+    try:
+        return time.time() - os.path.getmtime(p) < max_age
+    except OSError:
+        return False
+
+
+def other_instances(app_dir: str | None = None, own_pid: int | None = None) -> list[int]:
+    """같은 폴더에서 실행 중인 다른 ClipSlicer.exe 의 PID 목록 (exe 로 실행 중일 때만, 실패하면 [])."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return []
+    app_dir = os.path.normcase(os.path.abspath(app_dir or base_dir()))
+    own = own_pid or os.getpid()
+    ps = ("Get-CimInstance Win32_Process -Filter \"Name='ClipSlicer.exe'\" | "
+          "ForEach-Object { \"$($_.ProcessId)|$($_.ExecutablePath)\" }")
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                           timeout=15, creationflags=CREATE_NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    for line in r.stdout.splitlines():
+        pid, _, path = line.strip().partition("|")
+        if pid.isdigit() and int(pid) != own and path and os.path.normcase(os.path.dirname(path)) == app_dir:
+            out.append(int(pid))
+    return out
 
 
 def replacer_command(script: str, new_dir: str, app_dir: str, exe_name: str, pid: int, lite: bool) -> list[str]:
