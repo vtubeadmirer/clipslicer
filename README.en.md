@@ -48,7 +48,7 @@ Releases that only change the code arrive as a **lite update** of about 20 MB th
 | Stream bookmarks | **Stream bookmark mode**: a global hotkey (`Ctrl+Alt+B` …) records moments while streaming or recording; open the recording and the bookmarks are offered as markers |
 | Output | Fast (lossless copy), Smart (re-encode only the first second), Precise (full re-encode), **vertical 9:16 Shorts** (crop or **blur background**), audio only (m4a/mp3), merge segments, filename patterns, GPU encoding (NVENC/QSV/AMF) |
 | Output effects | **Loudness normalization** (-14 LUFS), **burned-in caption**, **burned-in subtitles** (srt/ass/vtt), **watermark** PNG, **intro/outro** videos |
-| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; start screen with recent work and a sample video |
+| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; **Record from site** (sign in once in the built-in browser, the stream is detected when it plays, one-click live recording — e.g. rplay); direct m3u8 download; start screen with recent work and a sample video |
 | Publish | **YouTube upload** of the cut files to your connected channel as private videos (title, description, tags, thumbnail, playlist, resumable, pre-upload limit checks), **upload presets**, **scheduled publish**, **upload history**, **Discord webhook** posting, copy chapter list, save current frame as PNG |
 | Ops | Update notifications with self-replacement (**lite updates**), tray notifications, first-run guide, error log and dialogs, compatibility mode for GPU-less machines, portable settings (`settings.ini`) |
 

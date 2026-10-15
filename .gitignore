@@ -26,3 +26,8 @@ logs/
 # 유튜브 자격 증명 (절대 올리지 말 것)
 youtube_token.bin
 youtube_client_secret.json
+dist_test/
+# 내장 브라우저 프로필·쿠키 (로그인 정보, 절대 올리지 말 것)
+web_profile/
+bookmarks.jsonl
+youtube_uploads.jsonl

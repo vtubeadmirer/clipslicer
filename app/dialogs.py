@@ -287,6 +287,7 @@ class CropDialog(QDialog):
 
 class DownloadDialog(QDialog):
     """URL 에서 영상 받기 (yt-dlp). 받은 파일 경로는 .result_path."""
+    siteRequested = Signal(str)  # 페이지 주소를 내장 브라우저로 열어 달라는 요청
 
     def __init__(self, parent, worker_factory, default_dir: str, last_quality: str = "best",
                  last_cookies: str = "", last_referer: str = ""):
@@ -374,6 +375,10 @@ class DownloadDialog(QDialog):
         self.lbl_status.setWordWrap(True)
         lay.addWidget(self.lbl_status)
         btns = QHBoxLayout()
+        self.b_site = QPushButton(tr("🌐 브라우저로 열어 녹화"))
+        self.b_site.setToolTip(tr("로그인이 필요하거나 페이지 주소를 지원하지 않는 방송(rplay 등)은 내장 브라우저로 열어 녹화합니다"))
+        self.b_site.clicked.connect(lambda: self.siteRequested.emit(self.ed_url.text().strip()))
+        btns.addWidget(self.b_site)
         btns.addStretch(1)
         self.b_start = QPushButton(tr("받기"))
         self.b_start.setDefault(True)
@@ -417,6 +422,10 @@ class DownloadDialog(QDialog):
 
     def _start(self):
         url = self.ed_url.text().strip()
+        from .live_record import unsupported_page
+        if url and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
+            self.siteRequested.emit(url)
+            return
         if not url.lower().startswith(("http://", "https://")):
             QMessageBox.warning(self, "URL", tr("http:// 또는 https:// 로 시작하는 주소를 넣어 주세요."))
             return

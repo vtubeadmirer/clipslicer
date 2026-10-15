@@ -252,6 +252,14 @@ You can request a higher quota in Google Cloud Console. Custom thumbnails need a
 <p>These features shorten the path from a VOD to finished clips: bookmark moments while streaming, find highlights from chat and audio reactions,
 add captions and a watermark, export as Shorts and send the result to YouTube or Discord, all in one program.</p>
 
+<h2>Record from site (streams that need a login)</h2>
+<p><b>File ▸ Record from site</b> (<kbd>Ctrl+Alt+L</kbd>). Streams whose page URL yt-dlp does not support, or that need a login (such as rplay),
+open in a small browser inside ClipSlicer. Sign in there once and it is remembered; as soon as the broadcast plays, the stream URL and login cookies
+are detected and <b>● Start recording</b> lights up. <b>■ Stop recording</b> saves what was recorded as mp4 and opens it for editing.
+Pasting an rplay page URL into Open from URL, or pressing <b>🌐 Open in browser and record</b>, opens the same window.</p>
+<p>If you already have the m3u8 URL you can paste it into <b>Open from URL</b> (login cookies: Firefox or cookies.txt; Referer filled automatically).
+DRM-protected streams cannot be downloaded. Use it to archive your own streams or streams you have permission for.</p>
+
 <h2>Stream bookmark mode</h2>
 <p><b>File ▸ Stream bookmark mode…</b>. A small always-on-top window appears. While streaming or recording, press the <b>global hotkey</b> (default <kbd>Ctrl+Alt+B</kbd>)
 whenever a moment is worth clipping and the time is recorded. It works even when OBS or a game is in front. Choose between <kbd>Ctrl+Alt+B</kbd> / <kbd>Ctrl+Alt+M</kbd> / <kbd>Ctrl+Shift+B</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd>;
