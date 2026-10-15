@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit, QRadioButton,
     QProgressBar, QFileDialog, QMessageBox, QGroupBox, QPlainTextEdit, QCheckBox, QAbstractItemView,
     QToolButton, QSlider, QComboBox, QStackedWidget, QMenu, QSizePolicy, QStyle, QApplication,
+    QScrollArea, QFrame,
 )
 
 from . import __version__, ffmpeg_tools
@@ -283,10 +284,23 @@ class MainWindow(QMainWindow):
         self.sl_volume.setFocusPolicy(Qt.NoFocus)
         self.sl_volume.valueChanged.connect(self.player.set_volume)
         ctl.addWidget(self.sl_volume)
-        cv.addLayout(ctl)
+        # 창이 좁으면 컨트롤 줄은 가로 스크롤 (창 최소 폭을 키우지 않게)
+        ctl_w = QWidget()
+        ctl_w.setLayout(ctl)
+        ctl_sa = QScrollArea()
+        ctl_sa.setWidget(ctl_w)
+        ctl_sa.setWidgetResizable(True)
+        ctl_sa.setFrameShape(QFrame.NoFrame)
+        ctl_sa.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        ctl_sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        ctl_sa.setFixedHeight(ctl_w.sizeHint().height() + 14)
+        cv.addWidget(ctl_sa)
 
         hint = QLabel(tr("타임라인: 클릭 이동 · 우클릭 마커 추가/삭제 · 마커 드래그 · Ctrl+클릭 구간 켜기/끄기 · 더블클릭 구간 반복 · Ctrl+휠 확대"))
         hint.setObjectName("hint")
+        hint.setWordWrap(True)
+        hint.setMinimumWidth(0)
+        hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         cv.addWidget(hint)
         root.addWidget(center)
 
@@ -385,6 +399,9 @@ class MainWindow(QMainWindow):
         self.cb_merge.setFocusPolicy(Qt.NoFocus)
         self.cb_merge.toggled.connect(lambda _c: self._refresh_table())
         optrow.addWidget(self.cb_merge)
+        optrow.addStretch(1)
+        gv.addLayout(optrow)
+        optrow = QHBoxLayout()  # 완료 후 동작은 둘째 줄 (패널 폭을 줄이기 위해)
         self.cb_open = QCheckBox(tr("완료 후 폴더 열기"))
         self.cb_open.setChecked(True)
         self.cb_open.setFocusPolicy(Qt.NoFocus)
@@ -465,8 +482,14 @@ class MainWindow(QMainWindow):
         self.log.setPlaceholderText(tr("내보내기 결과가 여기에 표시됩니다"))
         gv.addWidget(self.log)
         rv.addWidget(grp)
-        root.addWidget(right)
-        self.right_panel = right
+        # 오른쪽 패널은 좁아지면 스크롤 (창 최소 폭을 키우지 않게)
+        right_sa = QScrollArea()
+        right_sa.setWidget(right)
+        right_sa.setWidgetResizable(True)
+        right_sa.setFrameShape(QFrame.NoFrame)
+        right_sa.setMinimumWidth(260)
+        root.addWidget(right_sa)
+        self.right_panel = right_sa
 
         root.setStretchFactor(0, 0)
         root.setStretchFactor(1, 1)
