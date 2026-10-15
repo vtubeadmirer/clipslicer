@@ -64,7 +64,8 @@ class PopupPage(QWebEnginePage):
         self.popups = []
 
     def createWindow(self, _type):
-        dlg = QDialog(self._owner.window())
+        dlg = QDialog(self._owner.window(), Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+        dlg.setSizeGripEnabled(True)
         dlg.setWindowTitle(tr("로그인"))
         dlg.resize(520, 680)
         dlg.setAttribute(Qt.WA_DeleteOnClose)
@@ -128,8 +129,14 @@ class SiteRecordWindow(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle(tr("사이트에서 녹화"))
+        # 일반 창처럼: 가장자리 드래그로 크기 조절, 최대화·최소화, 마지막 크기 기억
+        self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+        self.setSizeGripEnabled(True)
+        self.setMinimumSize(480, 360)
         self.resize(1100, 760)
-        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
+        geo = settings.value("site_geometry")
+        if geo:
+            self.restoreGeometry(geo)
         self.streams: list[str] = []
         self.page_url = ""
         self.cookies: dict[tuple, dict] = {}
@@ -161,11 +168,35 @@ class SiteRecordWindow(QDialog):
         top.addWidget(self.b_reload)
         top.addWidget(self.ed_url, 1)
         top.addWidget(b_go)
+        top.addSpacing(8)
+        self.b_zoom_out = QToolButton()
+        self.b_zoom_out.setText("−")
+        self.b_zoom_out.setToolTip(tr("페이지 축소 (Ctrl+-)"))
+        self.b_zoom_reset = QToolButton()
+        self.b_zoom_reset.setText("100%")
+        self.b_zoom_reset.setToolTip(tr("원래 크기 (Ctrl+0)"))
+        self.b_zoom_in = QToolButton()
+        self.b_zoom_in.setText("+")
+        self.b_zoom_in.setToolTip(tr("페이지 확대 (Ctrl+=)"))
+        for b in (self.b_zoom_out, self.b_zoom_reset, self.b_zoom_in):
+            top.addWidget(b)
         lay.addLayout(top)
 
         self.view = QWebEngineView(self)
         self.view.setPage(PopupPage(self.profile, self.view))
         self.b_back.clicked.connect(self.view.back)
+        self.b_zoom_out.clicked.connect(lambda: self._zoom(-0.1))
+        self.b_zoom_in.clicked.connect(lambda: self._zoom(+0.1))
+        self.b_zoom_reset.clicked.connect(lambda: self._zoom(0))
+        from PySide6.QtGui import QShortcut, QKeySequence
+        for keys, d in (("Ctrl+-", -0.1), ("Ctrl+=", 0.1), ("Ctrl++", 0.1), ("Ctrl+0", 0)):
+            QShortcut(QKeySequence(keys), self, activated=lambda d=d: self._zoom(d))
+        try:
+            z = float(settings.value("site_zoom", 1.0) or 1.0)
+        except (TypeError, ValueError):
+            z = 1.0
+        self.view.setZoomFactor(z)
+        self.b_zoom_reset.setText(f"{round(z * 100)}%")
         self.b_reload.clicked.connect(self.view.reload)
         self.view.urlChanged.connect(lambda u: self.ed_url.setText(u.toString()))
         lay.addWidget(self.view, 1)
@@ -282,6 +313,13 @@ class SiteRecordWindow(QDialog):
             if err and err != tr("취소됨"):
                 QMessageBox.warning(self, tr("사이트에서 녹화"), err)
 
+    def _zoom(self, delta: float):
+        """delta 0 이면 100%, 아니면 25%~300% 사이에서 조절. 배율은 기억한다."""
+        z = 1.0 if delta == 0 else min(3.0, max(0.25, round(self.view.zoomFactor() + delta, 2)))
+        self.view.setZoomFactor(z)
+        self.b_zoom_reset.setText(f"{round(z * 100)}%")
+        self.settings.setValue("site_zoom", z)
+
     def closeEvent(self, e):
         if self.worker is not None:
             if QMessageBox.question(self, tr("사이트에서 녹화"),
@@ -296,5 +334,6 @@ class SiteRecordWindow(QDialog):
             self.profile.cookieStore().cookieRemoved.disconnect(self._on_cookie_removed)
         except (RuntimeError, TypeError):
             pass
+        self.settings.setValue("site_geometry", self.saveGeometry())
         self.view.page().deleteLater()
         super().closeEvent(e)
