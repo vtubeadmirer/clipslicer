@@ -29,3 +29,10 @@ def test_clean_user_agent():
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) QtWebEngine/6.140.0 Chrome/140.0.0.0 Safari/537.36"
     assert clean_user_agent(ua) == "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
     assert clean_user_agent("") == ""
+
+
+def test_chrome_brands():
+    from app.sitebrowser import chrome_brands
+    b = chrome_brands({"Chromium": "140.0.7339.225", "Not=A?Brand": "24.0.0.0"})
+    assert b["Google Chrome"] == "140.0.7339.225" and b["Chromium"] == "140.0.7339.225" and "Not=A?Brand" in b
+    assert chrome_brands({})["Google Chrome"]
