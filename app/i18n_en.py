@@ -699,4 +699,5 @@ EN = {
     "■ 녹화 중지 (저장)": "■ Stop recording (save)",
     "저장했습니다: {0}": "Saved: {0}",
     "녹화 중입니다. 지금까지 받은 분량을 저장하고 닫을까요?": "Recording is in progress. Save what has been recorded so far and close?",
+    "로그인": "Sign in",
 }

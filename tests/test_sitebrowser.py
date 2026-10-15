@@ -22,3 +22,10 @@ def test_write_cookies_txt_is_readable_by_ytdlp(tmp_path):
     hdr = lr.cookie_header(p, "https://media.rplay.live/live/master.m3u8")
     assert "tok=abc" in hdr and "s=1" in hdr
     assert lr.cookie_header(p, "https://other.example/x.m3u8") == ""
+
+
+def test_clean_user_agent():
+    from app.sitebrowser import clean_user_agent
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) QtWebEngine/6.140.0 Chrome/140.0.0.0 Safari/537.36"
+    assert clean_user_agent(ua) == "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    assert clean_user_agent("") == ""

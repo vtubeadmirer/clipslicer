@@ -43,7 +43,43 @@ def shared_profile() -> QWebEngineProfile:
         _PROFILE.setPersistentStoragePath(profile_dir())
         _PROFILE.setCachePath(os.path.join(profile_dir(), "cache"))
         _PROFILE.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+        # 구글 등은 'QtWebEngine' 이 들어간 내장 브라우저의 로그인을 막는다 → 일반 크롬과 같은 식별 문자열
+        _PROFILE.setHttpUserAgent(clean_user_agent(_PROFILE.httpUserAgent()))
     return _PROFILE
+
+
+def clean_user_agent(ua: str) -> str:
+    """'... QtWebEngine/6.x Chrome/140 ...' → '... Chrome/140 ...'"""
+    import re
+    return re.sub(r"\s*QtWebEngine/[\d.]+", "", ua or "").strip()
+
+
+class PopupPage(QWebEnginePage):
+    """window.open() 으로 열리는 로그인 팝업(구글·애플·트위터 등)을 별도 창으로 띄운다.
+    같은 프로필을 쓰므로 팝업에서 로그인하면 쿠키가 원래 창에도 그대로 적용된다."""
+
+    def __init__(self, profile, parent_widget):
+        super().__init__(profile, parent_widget)
+        self._owner = parent_widget
+        self.popups = []
+
+    def createWindow(self, _type):
+        dlg = QDialog(self._owner.window())
+        dlg.setWindowTitle(tr("로그인"))
+        dlg.resize(520, 680)
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        view = QWebEngineView(dlg)
+        page = PopupPage(self.profile(), view)
+        view.setPage(page)
+        page.windowCloseRequested.connect(dlg.close)   # 로그인 끝나고 팝업이 스스로 닫힐 때
+        view.titleChanged.connect(lambda t: dlg.setWindowTitle(t or tr("로그인")))
+        lay.addWidget(view)
+        dlg.finished.connect(lambda *_: self.popups.remove(dlg) if dlg in self.popups else None)
+        self.popups.append(dlg)
+        dlg.show()
+        return page
 
 
 def write_cookies_txt(cookies: list[dict], path: str) -> str:
@@ -128,7 +164,7 @@ class SiteRecordWindow(QDialog):
         lay.addLayout(top)
 
         self.view = QWebEngineView(self)
-        self.view.setPage(QWebEnginePage(self.profile, self.view))
+        self.view.setPage(PopupPage(self.profile, self.view))
         self.b_back.clicked.connect(self.view.back)
         self.b_reload.clicked.connect(self.view.reload)
         self.view.urlChanged.connect(lambda u: self.ed_url.setText(u.toString()))
