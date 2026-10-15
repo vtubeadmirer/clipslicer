@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from .i18n import tr
 import os
+import time
+import urllib.parse
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -106,15 +108,27 @@ class DownloadWorker(QThread):
     """
     progress = Signal(float, str)
     done = Signal(str, str)
+    liveStarted = Signal()   # m3u8 라이브 녹화를 시작함 → 대화상자가 '녹화 중지' 버튼을 보여 준다
 
     def __init__(self, url: str, out_dir: str, quality: str = "best", section: tuple[float, float] | None = None,
-                 parent=None):
+                 parent=None, cookies: str = "", referer: str = ""):
         super().__init__(parent)
         self.url, self.out_dir, self.quality, self.section = url, out_dir, quality, section
+        self.cookies, self.referer = cookies, referer
         self._cancel = False
+        self._stop = False
+        self._recorder = None
 
     def cancel(self):
         self._cancel = True
+        if self._recorder is not None:
+            self._recorder.stop()
+
+    def stop_recording(self):
+        """라이브 녹화를 멈추고 그때까지 받은 분량을 저장한다."""
+        self._stop = True
+        if self._recorder is not None:
+            self._recorder.stop()
 
     def _fmt(self) -> str:
         if self.quality in ("1080", "720", "480"):
@@ -139,6 +153,12 @@ class DownloadWorker(QThread):
         }
         if ffdir:
             opts["ffmpeg_location"] = ffdir
+        from . import live_record
+        opts.update(live_record.ytdlp_cookie_opts(self.cookies))
+        if self.referer:
+            hdr = live_record.request_headers(self.referer)
+            hdr.pop("User-Agent", None)
+            opts["http_headers"] = hdr
         return opts
 
     def run(self):
@@ -165,7 +185,13 @@ class DownloadWorker(QThread):
                 self.progress.emit(0.99, tr("합치는 중…"))
 
         try:
-            if self.section:
+            from . import live_record
+            msg = live_record.unsupported_page(self.url)
+            if msg:
+                raise live_record.LiveError(msg)
+            if live_record.is_m3u8(self.url) and not self.section:
+                path = self._download_m3u8(yt_dlp, hook)
+            elif self.section:
                 path = self._download_section(yt_dlp, hook)
             else:
                 path = self._download_full(yt_dlp, hook)
@@ -183,6 +209,60 @@ class DownloadWorker(QThread):
                 if "ERROR:" in msg:
                     msg = msg.split("ERROR:", 1)[1].strip()
                 self.done.emit("", msg[:400])
+
+    # ---- m3u8 주소 직접 (라이브면 녹화) ----
+    def _download_m3u8(self, yt_dlp, hook) -> str:
+        from . import live_record as lr
+        from .segments import safe_filename
+        self.progress.emit(0.0, tr("재생 목록 확인 중…"))
+        cookie = lr.cookie_header(self.cookies, self.url)
+        headers = lr.request_headers(self.referer, cookie)
+        max_h = int(self.quality) if self.quality in ("1080", "720", "480") else 0
+        media_url, live = lr.resolve(self.url, headers, max_h)
+        host = urllib.parse.urlparse(self.url).netloc.split(":")[0] or "stream"
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        base = os.path.join(self.out_dir, safe_filename(f"{host} {stamp}"))
+        if not live:
+            LOG.info("m3u8 VOD 받기: %s", media_url[:120])
+            opts = self._base_opts(hook)
+            opts["outtmpl"] = base + ".%(ext)s"
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(media_url, download=True)
+                req = (info or {}).get("requested_downloads") or []
+                path = req[0].get("filepath") if req else ydl.prepare_filename(info)
+            return path or ""
+        LOG.info("라이브 녹화 시작: %s", media_url[:120])
+        ts = base + ".ts"
+        rec = lr.LiveRecorder(media_url, ts, self.referer, cookie)
+        self._recorder = rec
+        rec.start()
+        self.liveStarted.emit()
+        t0 = time.time()
+
+        def prog(out_t, size):
+            self.progress.emit(0.5, tr("녹화 중 {0} · {1:.0f} MB (녹화 중지를 누르면 저장)").format(
+                time.strftime("%H:%M:%S", time.gmtime(out_t or (time.time() - t0))), size / 1e6))
+        code = rec.poll_progress(prog, lambda: self._cancel or self._stop)
+        self._recorder = None
+        if self._cancel and not self._stop:
+            for p in (ts,):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            raise yt_dlp.utils.DownloadCancelled()
+        if not os.path.isfile(ts) or os.path.getsize(ts) < 1024:
+            raise lr.LiveError(tr("녹화된 내용이 없습니다. ") + " / ".join(rec.stderr_tail[-3:]))
+        LOG.info("라이브 녹화 종료 code=%s %.1fs %.1fMB", code, rec.out_time, rec.size / 1e6)
+        self.progress.emit(0.97, tr("mp4 로 정리 중…"))
+        mp4 = base + ".mp4"
+        if lr.remux_to_mp4(ts, mp4):
+            try:
+                os.remove(ts)
+            except OSError:
+                pass
+            return mp4
+        return ts  # 정리에 실패해도 .ts 는 그대로 열 수 있다
 
     # ---- 전체 ----
     def _download_full(self, yt_dlp, hook) -> str:

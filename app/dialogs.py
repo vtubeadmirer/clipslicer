@@ -288,15 +288,20 @@ class CropDialog(QDialog):
 class DownloadDialog(QDialog):
     """URL 에서 영상 받기 (yt-dlp). 받은 파일 경로는 .result_path."""
 
-    def __init__(self, parent, worker_factory, default_dir: str, last_quality: str = "best"):
+    def __init__(self, parent, worker_factory, default_dir: str, last_quality: str = "best",
+                 last_cookies: str = "", last_referer: str = ""):
         super().__init__(parent)
         self.setWindowTitle(tr("URL 에서 영상 열기"))
-        self.resize(560, 260)
+        self.resize(620, 320)
         self.worker_factory = worker_factory
         self.worker = None
         self.result_path = None
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel(tr("유튜브 · 치지직 · 트위치 VOD · 아프리카 등 yt-dlp 가 지원하는 주소를 붙여넣으세요.")))
+        tip = QLabel(tr("rplay 처럼 페이지 주소를 지원하지 않는 곳은 방송의 m3u8 주소를 넣으면 됩니다. 라이브면 녹화합니다."))
+        tip.setWordWrap(True)
+        tip.setStyleSheet("color:#9aa0a6; font-size:11px;")
+        lay.addWidget(tip)
         self.ed_url = QLineEdit()
         self.ed_url.setPlaceholderText("https://www.youtube.com/watch?v=…")
         lay.addWidget(self.ed_url)
@@ -335,6 +340,32 @@ class DownloadDialog(QDialog):
         srow.addWidget(self.ed_end)
         srow.addStretch(1)
         lay.addLayout(srow)
+        crow = QHBoxLayout()
+        crow.addWidget(QLabel(tr("로그인 쿠키")))
+        self.cb_cookies = QComboBox()
+        self.cb_cookies.addItem(tr("사용 안 함"), "")
+        for name in ("Firefox", "Edge", "Chrome", "Whale"):
+            self.cb_cookies.addItem(name, name.lower())
+        self.cb_cookies.addItem(tr("cookies.txt 파일…"), "file")
+        self.cb_cookies.setToolTip(tr("구독자 전용 방송처럼 로그인이 필요한 경우, 그 사이트에 로그인해 둔 브라우저를 고르세요.\n"
+                                      "크롬·엣지·웨일은 쿠키 암호화 때문에 실패할 수 있어 Firefox 나 cookies.txt 를 권장합니다."))
+        self.cookie_file = ""
+        if last_cookies and last_cookies.lower() not in ("firefox", "edge", "chrome", "whale"):
+            self.cookie_file = last_cookies
+            self.cb_cookies.setItemText(self.cb_cookies.count() - 1, "cookies.txt: " + os.path.basename(last_cookies))
+            self.cb_cookies.setCurrentIndex(self.cb_cookies.count() - 1)
+        else:
+            i = self.cb_cookies.findData(last_cookies.lower())
+            self.cb_cookies.setCurrentIndex(i if i >= 0 else 0)
+        self.cb_cookies.activated.connect(self._on_cookie_choice)
+        crow.addWidget(self.cb_cookies)
+        crow.addSpacing(12)
+        crow.addWidget(QLabel(tr("참조 페이지")))
+        self.ed_ref = QLineEdit(last_referer)
+        self.ed_ref.setPlaceholderText(tr("선택 — 예: https://rplay.live/"))
+        self.ed_ref.setToolTip(tr("일부 사이트는 자기 페이지에서 온 요청만 받습니다. 비워 두면 주소를 보고 자동으로 채웁니다."))
+        crow.addWidget(self.ed_ref, 1)
+        lay.addLayout(crow)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setFormat(tr("대기 중"))
@@ -352,6 +383,24 @@ class DownloadDialog(QDialog):
         btns.addWidget(self.b_start)
         btns.addWidget(self.b_cancel)
         lay.addLayout(btns)
+
+    def _on_cookie_choice(self, _i: int):
+        if self.cb_cookies.currentData() == "file":
+            p, _ = QFileDialog.getOpenFileName(self, tr("cookies.txt 선택"), "", "cookies (*.txt);;* (*.*)")
+            if p:
+                self.cookie_file = p
+                self.cb_cookies.setItemText(self.cb_cookies.currentIndex(), "cookies.txt: " + os.path.basename(p))
+            else:
+                self.cb_cookies.setCurrentIndex(0)
+
+    @property
+    def cookies(self) -> str:
+        d = self.cb_cookies.currentData()
+        return self.cookie_file if d == "file" else (d or "")
+
+    @property
+    def referer(self) -> str:
+        return self.ed_ref.text().strip()
 
     def _choose_dir(self):
         d = QFileDialog.getExistingDirectory(self, tr("저장 폴더"), self.ed_dir.text())
@@ -384,12 +433,38 @@ class DownloadDialog(QDialog):
         os.makedirs(self.out_dir, exist_ok=True)
         self.b_start.setEnabled(False)
         self.ed_url.setEnabled(False)
-        self.worker = self.worker_factory(url, self.out_dir, self.quality, section)
+        from .live_record import guess_referer
+        referer = self.referer or guess_referer(url)
+        if referer and not self.referer:
+            self.ed_ref.setText(referer)
+        self.worker = self.worker_factory(url, self.out_dir, self.quality, section, self.cookies, referer)
         self.worker.progress.connect(self._on_progress)
         self.worker.done.connect(self._on_done)
+        if hasattr(self.worker, "liveStarted"):
+            self.worker.liveStarted.connect(self._on_live)
         self.worker.start()
 
+    def _on_live(self):
+        self.progress.setRange(0, 0)  # 길이를 모르므로 움직이는 막대
+        self.b_start.setText(tr("● 녹화 중지 (저장)"))
+        self.b_start.setEnabled(True)
+        try:
+            self.b_start.clicked.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        self.b_start.clicked.connect(self._stop_live)
+        self.b_cancel.setText(tr("취소 (버리기)"))
+
+    def _stop_live(self):
+        if self.worker:
+            self.worker.stop_recording()
+        self.b_start.setEnabled(False)
+        self.lbl_status.setText(tr("녹화를 멈추고 저장하는 중…"))
+
     def _on_progress(self, frac: float, text: str):
+        if self.progress.maximum() == 0:  # 라이브 녹화 중
+            self.lbl_status.setText(text)
+            return
         self.progress.setValue(int(frac * 1000))
         self.progress.setFormat(f"%p%  {text}")
 
@@ -398,7 +473,14 @@ class DownloadDialog(QDialog):
             self.result_path = path
             self.accept()
         else:
+            self.progress.setRange(0, 1000)
             self.lbl_status.setText(tr("실패: ") + error)
+            self.b_start.setText(tr("받기"))
+            try:
+                self.b_start.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.b_start.clicked.connect(self._start)
             self.b_start.setEnabled(True)
             self.ed_url.setEnabled(True)
             self.progress.setFormat(tr("실패"))
