@@ -379,21 +379,37 @@ def update_in_progress(app_dir: str | None = None, max_age: float = 600.0) -> bo
         return False
 
 
+def decode_output(data: bytes | None) -> str:
+    """콘솔 프로그램 출력 bytes → str. UTF-8 우선, 아니면 한국어 윈도우 코드페이지(cp949), 그래도 안 되면 대체 문자."""
+    if not data:
+        return ""
+    for enc in ("utf-8", "cp949"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            pass
+    return data.decode("utf-8", errors="replace")
+
+
 def other_instances(app_dir: str | None = None, own_pid: int | None = None) -> list[int]:
     """같은 폴더에서 실행 중인 다른 ClipSlicer.exe 의 PID 목록 (exe 로 실행 중일 때만, 실패하면 [])."""
     if os.name != "nt" or not getattr(sys, "frozen", False):
         return []
     app_dir = os.path.normcase(os.path.abspath(app_dir or base_dir()))
     own = own_pid or os.getpid()
-    ps = ("Get-CimInstance Win32_Process -Filter \"Name='ClipSlicer.exe'\" | "
+    # 출력은 UTF-8 로 받는다: 경로에 한글(예: 문서)이 있으면 PowerShell 기본 코드페이지(cp949)와
+    # 앱의 UTF-8 이 어긋나 text=True 디코딩이 읽기 스레드에서 실패하고 stdout 이 None 이 된다 (0.9.5~0.9.7 업데이트 오류)
+    ps = ("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+          "Get-CimInstance Win32_Process -Filter \"Name='ClipSlicer.exe'\" | "
           "ForEach-Object { \"$($_.ProcessId)|$($_.ExecutablePath)\" }")
     try:
-        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
                            timeout=15, creationflags=CREATE_NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired):
         return []
+    text = decode_output(r.stdout)
     out = []
-    for line in r.stdout.splitlines():
+    for line in text.splitlines():
         pid, _, path = line.strip().partition("|")
         if pid.isdigit() and int(pid) != own and path and os.path.normcase(os.path.dirname(path)) == app_dir:
             out.append(int(pid))

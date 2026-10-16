@@ -158,6 +158,39 @@ def test_cleanup_never_deletes_unexpected_parent(tmp_path):
     assert app.exists() and sibling.exists()
 
 
+def test_decode_output():
+    assert updater.decode_output(None) == "" and updater.decode_output(b"") == ""
+    assert updater.decode_output("12|C:\\문서\\a.exe".encode("utf-8")) == "12|C:\\문서\\a.exe"
+    assert updater.decode_output("12|C:\\문서\\a.exe".encode("cp949")) == "12|C:\\문서\\a.exe"
+    assert updater.decode_output(b"\xff\xfe\xfa") != ""
+
+
+_OTHER_SCRIPT = r"""
+import os, sys
+sys.path.insert(0, sys.argv[1])
+sys.frozen = True   # exe 로 실행 중인 것처럼
+from app import updater
+print("PIDS=" + ",".join(map(str, updater.other_instances(sys.argv[2], own_pid=1))))
+"""
+
+
+def test_other_instances_with_korean_folder(tmp_path):
+    """0.9.5~0.9.7 오류 재현: 프로그램 폴더 경로에 한글(문서)이 있고 앱이 UTF-8 모드면 stdout 이 None 이 되어 업데이트가 죽었다."""
+    app = _app(tmp_path / "문서 폴더" / "ClipSlicer")
+    other = subprocess.Popen([str(app / "ClipSlicer.exe"), "-n", "30", "127.0.0.1"], stdout=subprocess.DEVNULL,
+                             creationflags=0x08000000)
+    try:
+        time.sleep(1)
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        r = subprocess.run([sys.executable, "-X", "utf8", "-c", _OTHER_SCRIPT, root, str(app)],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    finally:
+        other.kill()
+    line = next((l for l in r.stdout.splitlines() if l.startswith("PIDS=")), None)
+    assert line, (r.returncode, r.stderr[-1500:])
+    assert str(other.pid) in line.split("=", 1)[1].split(","), line
+
+
 def test_restore_user_data_from_backup(tmp_path):
     """0.9.4 이하 교체 스크립트가 지운 사용자 데이터를 0.9.5 첫 실행에서 되살린다 (기존 파일은 덮어쓰지 않음)."""
     app = tmp_path / "app"

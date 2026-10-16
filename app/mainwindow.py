@@ -1649,7 +1649,11 @@ class MainWindow(QMainWindow):
             self._apply_update(d.new_dir)
 
     def _apply_update(self, new_dir: str):
-        others = updater.other_instances()
+        try:
+            others = updater.other_instances()
+        except Exception:  # 확인을 못 해도 업데이트는 막지 않는다 (교체 스크립트가 다시 기다려 준다)
+            LOG.exception("다른 ClipSlicer 창 확인 실패")
+            others = []
         if others:
             QMessageBox.warning(self, tr("업데이트"), tr("같은 폴더에서 ClipSlicer 창이 {0}개 더 열려 있습니다.\n"
                                                       "그 창들을 모두 닫은 뒤 다시 업데이트해 주세요 (열려 있으면 파일이 잠겨 교체가 실패합니다).").format(len(others)))
