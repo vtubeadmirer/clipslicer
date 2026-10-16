@@ -200,6 +200,10 @@ Downloaded files are not deleted. Videos that require a login cannot be download
 <h2>Audio only</h2>
 <p>Set <b>Output</b> to "Audio only (m4a)" or "(mp3)". m4a copies the audio losslessly when the source is AAC, otherwise it converts to AAC 192 kbps. mp3 always converts (high-quality VBR).</p>
 
+<h2>Video only (no sound)</h2>
+<p>Set <b>Output</b> to "Video only (no sound)" to save the picture without audio. The chosen method (Fast, Smart, Precise), merging and captions still apply; the audio is dropped at the end, so the video quality is unchanged. Handy when you want to add new background music.</p>
+
+
 <h2>Filename pattern</h2>
 <p><b>Settings ▸ Filename pattern</b>. <code>{name}</code> source name, <code>{n}</code> number, <code>{start}</code> <code>{end}</code> <code>{dur}</code> times.
 Example: <code>{name}_{start}-{end}</code> → <code>stream_12m05s-15m40s.mp4</code>. A name typed in the segment list always wins.</p>

@@ -382,6 +382,7 @@ class MainWindow(QMainWindow):
         optrow.addWidget(QLabel(tr("출력")))
         self.cb_audio = QComboBox()
         self.cb_audio.addItem(tr("영상 + 오디오"), "")
+        self.cb_audio.addItem(tr("영상만 (소리 없음)"), "mute")
         self.cb_audio.addItem(tr("오디오만 (m4a)"), "aac")
         self.cb_audio.addItem(tr("오디오만 (mp3)"), "mp3")
         self.cb_audio.addItem(tr("세로 9:16 쇼츠 (재인코딩)"), "vertical")
@@ -420,6 +421,7 @@ class MainWindow(QMainWindow):
         fxrow = QHBoxLayout()
         self.cb_normalize = QCheckBox(tr("음량 정규화"))
         self.cb_normalize.setToolTip(tr("loudnorm(-14 LUFS)으로 소리 크기를 고르게 맞춥니다. 오디오만 aac 로 다시 인코딩하고 영상은 그대로 복사합니다"))
+        self._normalize_tip = self.cb_normalize.toolTip()
         self.cb_normalize.setFocusPolicy(Qt.NoFocus)
         fxrow.addWidget(self.cb_normalize)
         self.cb_layout = QComboBox()
@@ -1439,6 +1441,9 @@ class MainWindow(QMainWindow):
         self.cb_layout.setVisible(vertical)
         self.cb_mode.setEnabled(not vertical)
         self.cb_mode.setToolTip(tr("세로 출력은 항상 재인코딩합니다") if vertical else self._mode_tip)
+        mute = self.cb_audio.currentData() == "mute"
+        self.cb_normalize.setEnabled(not mute)
+        self.cb_normalize.setToolTip(tr("영상만 출력은 소리를 빼므로 음량 정규화를 하지 않습니다") if mute else self._normalize_tip)
         self._refresh_table()
 
     def choose_crop(self):
@@ -2087,10 +2092,13 @@ class MainWindow(QMainWindow):
         mode = self._mode()
         out_kind = self.cb_audio.currentData()
         vertical = out_kind == "vertical"
-        audio = "" if vertical else out_kind
+        mute = out_kind == "mute"
+        audio = "" if vertical or mute else out_kind
         merge = self.cb_merge.isChecked()
         gpu = self.gpu_encoder if self.act_gpu.isChecked() else None
         fx = self._render_kwargs(vertical)
+        if mute:
+            fx["normalize"] = False
         needs_render = not audio and bool(fx["caption"] or fx["subtitle_path"] or fx["watermark"])
         jobs: list[ExportJob] = []
         for proj in projects:
@@ -2108,14 +2116,14 @@ class MainWindow(QMainWindow):
             if merge:
                 dst = os.path.join(outdir, f"{proj.stem}_merged{ext}")
                 jobs.append(ExportJob(proj.path, proj.info, proj.keyframes,
-                                      [ExportPart(s.start, s.end) for _, s in segs], dst, mode, audio, vert, gpu, **fx))
+                                      [ExportPart(s.start, s.end) for _, s in segs], dst, mode, audio, vert, gpu, mute=mute, **fx))
             else:
                 for i, seg in segs:
                     dst = os.path.join(outdir, proj.output_name(i, ext, self.pattern))
                     if os.path.abspath(dst) == os.path.abspath(proj.path):
                         dst = os.path.join(outdir, f"{proj.stem}_cut{ext}")
                     jobs.append(ExportJob(proj.path, proj.info, proj.keyframes,
-                                          [ExportPart(seg.start, seg.end)], dst, mode, audio, vert, gpu, **fx))
+                                          [ExportPart(seg.start, seg.end)], dst, mode, audio, vert, gpu, mute=mute, **fx))
         return jobs
 
     @staticmethod
@@ -2149,6 +2157,8 @@ class MainWindow(QMainWindow):
         extra = []
         if jobs[0].audio:
             extra.append(tr("오디오만"))
+        if jobs[0].mute:
+            extra.append(tr("영상만"))
         if jobs[0].vertical is not None:
             extra.append(tr("세로 9:16"))
         if self.cb_merge.isChecked():

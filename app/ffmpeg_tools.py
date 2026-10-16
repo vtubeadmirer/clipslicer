@@ -822,6 +822,15 @@ class Cutter:
         cmd += ["-movflags", "+faststart", "-progress", "pipe:1", dst]
         self._step(cmd, sum(i["duration"] for i in infos), cb)
 
+    def strip_audio(self, src: str, dst: str, duration: float, cb: ProgressCb):
+        """오디오를 빼고 비디오만 그대로 복사 (영상만 출력의 마지막 단계, 재인코딩 없음)."""
+        cmd = [find_tool("ffmpeg"), "-hide_banner", "-v", "error", "-y", "-nostats", "-i", src,
+               "-map", "0:v:0", "-c", "copy", "-an", "-sn", "-dn", "-map_metadata", "0"]
+        if os.path.splitext(dst)[1].lower() in MP4_LIKE:
+            cmd += ["-movflags", "+faststart"]
+        cmd += ["-progress", "pipe:1", dst]
+        self._step(cmd, max(duration, 0.1), cb)
+
 
 def _concat_escape(path: str) -> str:
     return path.replace("\\", "/").replace("'", "'\\''")

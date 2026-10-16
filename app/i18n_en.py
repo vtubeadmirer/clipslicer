@@ -709,4 +709,8 @@ EN = {
     '업데이트 보류': 'Update postponed',
     '다른 ClipSlicer 창이 열려 있어 업데이트를 적용하지 않았습니다.\n모든 ClipSlicer 창을 닫고 다시 업데이트해 주세요.': 'Another ClipSlicer window was open, so the update was not applied.\nClose all ClipSlicer windows and update again.',
     '업데이트를 적용하는 중입니다. 끝나면 자동으로 다시 열립니다.\n잠시 뒤에 다시 실행해 주세요.': 'An update is being applied. ClipSlicer will reopen automatically when it is done.\nPlease try again in a moment.',
+    '영상만 (소리 없음)': 'Video only (no sound)',
+    '영상만 출력은 소리를 빼므로 음량 정규화를 하지 않습니다': 'Video-only output drops the sound, so loudness normalization is skipped',
+    '영상만': 'video only',
+    ', 소리 제거': ', sound removed',
 }

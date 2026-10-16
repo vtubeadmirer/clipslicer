@@ -313,3 +313,29 @@ def test_export_worker_routing(media, tmp_path):
     w2.jobFinished.connect(lambda i, ok, msg: results.append((ok, msg)))
     w2.run()
     assert results[0][0] and abs(ft.probe(dst2)["duration"] - 2.0) < 0.15 and _sample_rate(dst2) == 48000
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("mode,merge,caption", [("fast", False, ""), ("smart", True, ""), ("precise", False, ""),
+                                                ("fast", False, "캡션")])
+def test_video_only_export(media, tmp_path, mode, merge, caption):
+    """영상만 (소리 없음): 어떤 방식·합치기·재인코딩이든 결과에 오디오 스트림이 없고 길이는 그대로, 임시 파일은 안 남는다."""
+    from PySide6.QtCore import QCoreApplication
+    from app.workers import ExportJob, ExportPart, ExportWorker
+    QCoreApplication.instance() or QCoreApplication([])
+    parts = [ExportPart(1.0, 3.0), ExportPart(5.0, 6.0)] if merge else [ExportPart(1.0, 3.0)]
+    dst = str(tmp_path / f"v_{mode}.mp4")
+    job = ExportJob(media["src"], media["info"], ft.keyframes(media["src"]), parts, dst, mode, "", None, None,
+                    normalize=True, caption=caption, mute=True)
+    results, prog = [], []
+    w = ExportWorker([job])
+    w.jobProgress.connect(lambda i, p: prog.append(p))
+    w.jobFinished.connect(lambda i, ok, msg: results.append((ok, msg)))
+    w.run()
+    assert results and results[0][0], results
+    assert "소리 제거" in results[0][1] and job.dst == dst
+    assert prog and prog == sorted(prog) and prog[-1] == 1.0
+    o = ft.probe(dst)
+    assert not o["has_audio"] and o["width"] == W
+    assert abs(o["duration"] - sum(p.end - p.start for p in parts)) < 0.3
+    assert os.listdir(tmp_path) == [os.path.basename(dst)]

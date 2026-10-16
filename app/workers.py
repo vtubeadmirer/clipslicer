@@ -385,6 +385,7 @@ class ExportJob:
     watermark_opacity: float = 0.8
     intro: str = ""                  # 앞에 붙일 영상 (재인코딩 출력에만)
     outro: str = ""                  # 뒤에 붙일 영상 (재인코딩 출력에만)
+    mute: bool = False               # 영상만: 다 만든 뒤 오디오를 빼고 비디오만 복사 (audio 와 함께 쓰지 않음)
 
     @property
     def label(self) -> str:
@@ -516,6 +517,28 @@ class ExportWorker(QThread):
         return self._merge(i, cutter, job, dst, cb, normalize)
 
     def _run_job(self, i: int, job: ExportJob) -> str:
+        if not job.mute or job.audio:
+            return self._run_job_av(i, job)
+        # 영상만: 평소대로 만든 뒤 오디오를 빼고 비디오만 복사 (모든 방식 · 합치기 · 인트로에 똑같이 적용)
+        tmp = tempfile.mkdtemp(prefix="clipslicer_mute_")
+        final = job.dst
+        try:
+            job.dst = os.path.join(tmp, "full" + (os.path.splitext(final)[1] or ".mp4"))
+            job.normalize = False  # 소리를 버리니 정규화할 필요 없음
+            note = self._run_job_av(i, job, lambda p: self.jobProgress.emit(i, 0.95 * p))
+            cutter = Cutter()
+            self._cutter = cutter
+            try:
+                cutter.strip_audio(job.dst, final, job.total_duration, lambda p: self.jobProgress.emit(i, 0.95 + 0.05 * p))
+            finally:
+                self._cutter = None
+            return note + tr(", 소리 제거")
+        finally:
+            job.dst = final
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _run_job_av(self, i: int, job: ExportJob, progress=None) -> str:
+        progress = progress or (lambda p: self.jobProgress.emit(i, p))
         cutter = Cutter()
         self._cutter = cutter
         try:
@@ -527,15 +550,15 @@ class ExportWorker(QThread):
                 LOG.info("인트로/아웃트로는 재인코딩 출력(정확하게·세로·캡션·자막·워터마크)에만 붙입니다 — 건너뜀: %s", job.dst)
                 extras = []
             if not extras:
-                return self._export_main(i, cutter, job, job.dst, lambda p: self.jobProgress.emit(i, p))
+                return self._export_main(i, cutter, job, job.dst, progress)
             # 본편을 임시로 만든 뒤 인트로/아웃트로와 같은 규격으로 다시 인코딩해 이어 붙인다 (정규화는 이때 한 번만)
             tmp = tempfile.mkdtemp(prefix="clipslicer_intro_")
             try:
                 main = os.path.join(tmp, "main" + (os.path.splitext(job.dst)[1] or ".mp4"))
-                note = self._export_main(i, cutter, job, main, lambda p: self.jobProgress.emit(i, 0.8 * p), normalize=False)
+                note = self._export_main(i, cutter, job, main, lambda p: progress(0.8 * p), normalize=False)
                 m = ffmpeg_tools.probe(main)
                 files = [f for f in (job.intro, main, job.outro) if f]
-                cutter.concat_render(files, job.dst, lambda p: self.jobProgress.emit(i, 0.8 + 0.2 * p),
+                cutter.concat_render(files, job.dst, lambda p: progress(0.8 + 0.2 * p),
                                      size=(m["width"], m["height"]), fps=m["fps"], gpu=job.gpu, normalize=job.normalize)
                 return note + tr(", 인트로/아웃트로 붙임")
             finally:
