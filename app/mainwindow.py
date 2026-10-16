@@ -4,6 +4,7 @@ from __future__ import annotations
 from .i18n import tr
 import os
 import subprocess
+import sys
 
 from PySide6.QtCore import Qt, QSettings, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QPixmap, QShortcut, QDragEnterEvent, QDropEvent, QColor, QBrush
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import (
 from . import __version__, ffmpeg_tools
 import logging
 
-from .paths import make_settings
+from .paths import make_settings, base_dir
 from .logging_setup import log_dir
 from . import updater
 from . import i18n
@@ -39,6 +40,7 @@ from .firstrun import FirstRunDialog, SampleWorker, sample_path
 from .chat import ChatDialog, ChatData, DEFAULT_KEYWORDS
 from .upload_history import HistoryDialog
 from . import discord
+from .bridge import Bridge
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".ts", ".m4v", ".wmv", ".flv", ".mpg", ".mpeg", ".m2ts", ".mts"}
 COL_USE, COL_NO, COL_ORDER, COL_START, COL_END, COL_DUR, COL_NAME, COL_NOTE = range(8)
@@ -140,6 +142,10 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_shortcuts()
         self.notifier = Notifier(self, QApplication.windowIcon())
+        self._dl_dialog = None
+        self.bridge = Bridge(self)   # 브라우저 확장 'ClipSlicer 연결' 수신 (127.0.0.1 전용)
+        self.bridge.received.connect(self._on_browser_request)
+        self.bridge.start()
         self._restore_settings()
         self._start_gpu_detect()
         QTimer.singleShot(3000, self._auto_check_updates)
@@ -534,6 +540,10 @@ class MainWindow(QMainWindow):
         a.setToolTip(tr("rplay 처럼 로그인이 필요한 방송 페이지를 열고, 재생되면 버튼 한 번으로 녹화합니다"))
         a.triggered.connect(lambda: self.open_site_recorder())
         m_file.addAction(a)
+        a = QAction(tr("브라우저 확장 연결… (크롬·엣지·웨일)"), self)
+        a.setToolTip(tr("평소 쓰는 브라우저에서 재생 중인 방송·영상을 로그인 그대로 ClipSlicer 로 보냅니다"))
+        a.triggered.connect(self.show_extension_help)
+        m_file.addAction(a)
         a = QAction(tr("방송 북마크 모드…"), self)
         a.triggered.connect(self.show_bookmark_window)
         m_file.addAction(a)
@@ -921,6 +931,7 @@ class MainWindow(QMainWindow):
             self.current.dirty = True
         self._save_dirty(force=True)
         self._save_settings()
+        self.bridge.stop()
         self.timeline.canvas.popup.hide()
         for w in self.workers.values():
             if w.isRunning():
@@ -1766,16 +1777,37 @@ class MainWindow(QMainWindow):
             proj.dirty = True
             self._schedule_save()
 
-    def open_url(self):
+    def open_url(self, *_args, browser_req: dict | None = None):
+        """URL 에서 받기. browser_req 는 브라우저 확장이 보낸 요청 (주소 · 헤더 · 쿠키) → 바로 시작."""
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
-        d = DownloadDialog(self, lambda u, o, q, sec=None, ck="", ref="": DownloadWorker(u, o, q, sec, self, ck, ref),
+        d = DownloadDialog(self, lambda u, o, q, sec=None, ck="", ref="", **kw: DownloadWorker(u, o, q, sec, self, ck, ref, **kw),
                            default_dir, self.settings.value("dl_quality", "best"),
                            self.settings.value("dl_cookies", "") or "", self.settings.value("dl_referer", "") or "")
         d.siteRequested.connect(lambda u: (d.reject(), QTimer.singleShot(0, lambda: self.open_site_recorder(u))))
-        accepted = d.exec()
-        self.settings.setValue("dl_cookies", d.cookies)
-        self.settings.setValue("dl_referer", d.referer)
+        cookie_file = ""
+        if browser_req:
+            if browser_req["cookies"]:
+                import tempfile
+                from .live_record import write_cookies_txt
+                fd, cookie_file = tempfile.mkstemp(prefix="clipslicer_ext_", suffix=".txt")
+                os.close(fd)
+                write_cookies_txt(browser_req["cookies"], cookie_file)
+            d.use_browser_request(browser_req, cookie_file)
+            QTimer.singleShot(0, d._start)
+        self._dl_dialog = d
+        try:
+            accepted = d.exec()
+        finally:
+            self._dl_dialog = None
+            if cookie_file:
+                try:
+                    os.remove(cookie_file)   # 로그인 쿠키가 든 임시 파일은 바로 지운다
+                except OSError:
+                    pass
+        if not browser_req:
+            self.settings.setValue("dl_cookies", d.cookies)
+            self.settings.setValue("dl_referer", d.referer)
         if accepted and d.result_path:
             self.settings.setValue("dl_dir", d.out_dir)
             self.settings.setValue("dl_quality", d.quality)
@@ -1783,9 +1815,54 @@ class MainWindow(QMainWindow):
             self.notifier.notify(tr("다운로드 완료"), os.path.basename(d.result_path))
             proj = self.projects.get(os.path.abspath(d.result_path))
             if proj and not proj.source_url:
-                proj.source_url = d.ed_url.text().strip()   # DownloadDialog 의 URL 입력칸 (dialogs.py)
+                # DownloadDialog 의 URL 입력칸 (dialogs.py). 브라우저에서 온 스트림은 원래 페이지 주소를 남긴다
+                proj.source_url = (browser_req or {}).get("page") or d.ed_url.text().strip()
                 proj.dirty = True
                 self._schedule_save()
+
+    # ---- 브라우저 확장 연결 ----
+    def _on_browser_request(self, req: dict):
+        if self.isMinimized():
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if self._dl_dialog is not None:
+            self.notifier.notify(tr("ClipSlicer"), tr("받기 창이 이미 열려 있습니다. 지금 작업이 끝난 뒤 다시 보내 주세요."))
+            return
+        QTimer.singleShot(0, lambda: self.open_url(browser_req=req))
+
+    def show_extension_help(self):
+        ext_dir = ""
+        for d in (base_dir(), getattr(sys, "_MEIPASS", "")):
+            if d and os.path.isfile(os.path.join(d, "browser_extension", "manifest.json")):
+                ext_dir = os.path.join(d, "browser_extension")
+                break
+        state = (tr("연결 대기 중 (127.0.0.1:{0})").format(self.bridge.port) if self.bridge.running
+                 else tr("연결 서버를 열지 못했습니다 — 다른 ClipSlicer 창이 이미 연결을 받고 있을 수 있습니다."))
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("브라우저 확장 연결"))
+        box.setText(tr("평소 쓰는 브라우저(크롬 · 엣지 · 웨일)에서 재생 중인 방송·영상을 그 브라우저의 로그인 그대로 "
+                       "ClipSlicer 로 보내 녹화/다운로드합니다. 내장 브라우저에서 구글 로그인이 막히는 사이트도 됩니다."))
+        box.setInformativeText(tr(
+            "설치 (한 번만):\n"
+            "1. 브라우저 주소창에 chrome://extensions (엣지: edge://extensions) 입력\n"
+            "2. 오른쪽 위 '개발자 모드' 켜기\n"
+            "3. '압축해제된 확장 프로그램 로드' → 아래 '확장 폴더 열기' 로 연 폴더를 선택\n\n"
+            "사용:\n"
+            "방송 페이지에서 영상을 재생 → 툴바의 ClipSlicer 아이콘 → 목록에서 '녹화/받기'\n\n"
+            "상태: {0}\n"
+            "정보는 이 PC 안(127.0.0.1)에서만 오가며, DRM 으로 보호된 영상은 받을 수 없습니다.").format(state))
+        b_open = box.addButton(tr("확장 폴더 열기"), QMessageBox.ActionRole)
+        b_copy = box.addButton(tr("폴더 경로 복사"), QMessageBox.ActionRole)
+        box.addButton(tr("닫기"), QMessageBox.RejectRole)
+        b_open.setEnabled(bool(ext_dir))
+        b_copy.setEnabled(bool(ext_dir))
+        box.exec()
+        if box.clickedButton() is b_open:
+            os.startfile(ext_dir)
+        elif box.clickedButton() is b_copy:
+            QApplication.clipboard().setText(ext_dir)
+            self.statusBar().showMessage(tr("확장 폴더 경로를 복사했습니다"), 4000)
 
     # ---- 방송 북마크 ----
     def show_bookmark_window(self):

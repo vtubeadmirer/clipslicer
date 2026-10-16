@@ -297,6 +297,7 @@ class DownloadDialog(QDialog):
         self.worker_factory = worker_factory
         self.worker = None
         self.result_path = None
+        self.browser_request: dict | None = None   # 브라우저 확장에서 받은 요청 (use_browser_request)
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel(tr("유튜브 · 치지직 · 트위치 VOD · 아프리카 등 yt-dlp 가 지원하는 주소를 붙여넣으세요.")))
         tip = QLabel(tr("rplay 처럼 페이지 주소를 지원하지 않는 곳은 방송의 m3u8 주소를 넣으면 됩니다. 라이브면 녹화합니다."))
@@ -389,6 +390,27 @@ class DownloadDialog(QDialog):
         btns.addWidget(self.b_cancel)
         lay.addLayout(btns)
 
+    def use_browser_request(self, req: dict, cookie_file: str = ""):
+        """브라우저 확장 'ClipSlicer 연결' 이 보낸 요청으로 채운다: 주소 고정, 그 브라우저의 헤더/쿠키를 그대로 쓴다."""
+        self.browser_request = req
+        self.setWindowTitle(tr("브라우저에서 받기"))
+        self.ed_url.setText(req["url"])
+        self.ed_url.setReadOnly(True)
+        if cookie_file:
+            self.cookie_file = cookie_file
+            self.cb_cookies.setItemText(self.cb_cookies.count() - 1, tr("브라우저 로그인 쿠키"))
+            self.cb_cookies.setCurrentIndex(self.cb_cookies.count() - 1)
+        self.cb_cookies.setEnabled(False)
+        self.ed_ref.setEnabled(False)
+        self.b_site.setVisible(False)
+        if req["kind"] == "stream":
+            self.cb_section.setEnabled(False)
+            what = tr("브라우저에서 재생 중인 스트림을 그 브라우저의 로그인·요청 정보 그대로 받습니다. 라이브면 녹화합니다.")
+        else:
+            what = tr("이 페이지를 브라우저의 로그인 쿠키와 함께 받습니다.")
+        title = req.get("title") or ""
+        self.lbl_status.setText((title + "\n" if title else "") + what)
+
     def _on_cookie_choice(self, _i: int):
         if self.cb_cookies.currentData() == "file":
             p, _ = QFileDialog.getOpenFileName(self, tr("cookies.txt 선택"), "", "cookies (*.txt);;* (*.*)")
@@ -423,7 +445,7 @@ class DownloadDialog(QDialog):
     def _start(self):
         url = self.ed_url.text().strip()
         from .live_record import unsupported_page
-        if url and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
+        if url and not self.browser_request and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
             self.siteRequested.emit(url)
             return
         if not url.lower().startswith(("http://", "https://")):
@@ -446,7 +468,12 @@ class DownloadDialog(QDialog):
         referer = self.referer or guess_referer(url)
         if referer and not self.referer:
             self.ed_ref.setText(referer)
-        self.worker = self.worker_factory(url, self.out_dir, self.quality, section, self.cookies, referer)
+        extra = {}
+        if self.browser_request:
+            extra = {"headers": self.browser_request["headers"] if self.browser_request["kind"] == "stream" else {},
+                     "title": self.browser_request.get("title") or ""}
+            referer = ""
+        self.worker = self.worker_factory(url, self.out_dir, self.quality, section, self.cookies, referer, **extra)
         self.worker.progress.connect(self._on_progress)
         self.worker.done.connect(self._on_done)
         if hasattr(self.worker, "liveStarted"):
@@ -483,6 +510,8 @@ class DownloadDialog(QDialog):
             self.accept()
         else:
             self.progress.setRange(0, 1000)
+            if self.browser_request and self.browser_request["kind"] == "page" and "Unsupported URL" in error:
+                error = tr("이 사이트는 페이지 주소로는 받을 수 없습니다. 브라우저에서 영상을 재생한 뒤 확장 목록에 뜬 스트림을 고르세요.")
             self.lbl_status.setText(tr("실패: ") + error)
             self.b_start.setText(tr("받기"))
             try:

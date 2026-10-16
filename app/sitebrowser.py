@@ -20,6 +20,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage, QWebEngin
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from .i18n import tr
+from .live_record import write_cookies_txt  # noqa: F401  (예전 위치에서 import 하던 곳 호환)
 
 LOG = logging.getLogger("clipslicer")
 
@@ -99,19 +100,6 @@ class PopupPage(QWebEnginePage):
         self.popups.append(dlg)
         dlg.show()
         return page
-
-
-def write_cookies_txt(cookies: list[dict], path: str) -> str:
-    """[{domain, path, secure, expiry, name, value}] → Netscape cookies.txt (yt-dlp/live_record 용)."""
-    lines = ["# Netscape HTTP Cookie File", "# ClipSlicer 내장 브라우저에서 저장 (로그인 정보가 들어 있으니 공유 금지)"]
-    for c in cookies:
-        dom = c["domain"]
-        lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
-                                "TRUE" if c.get("secure") else "FALSE", str(int(c.get("expiry") or 0)),
-                                c["name"], c["value"]]))
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(lines) + "\n")
-    return path
 
 
 def pick_stream(urls: list[str]) -> str:

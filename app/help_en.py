@@ -264,6 +264,18 @@ Pasting an rplay page URL into Open from URL, or pressing <b>🌐 Open in browse
 <p>If you already have the m3u8 URL you can paste it into <b>Open from URL</b> (login cookies: Firefox or cookies.txt; Referer filled automatically).
 DRM-protected streams cannot be downloaded. Use it to archive your own streams or streams you have permission for.</p>
 
+<h2>Browser extension link (Chrome, Edge, Whale)</h2>
+<p>When Google sign-in is blocked in the built-in browser (Google blocks sign-in inside apps) or a site can't be downloaded from its address,
+play it in <b>your everyday browser</b> and send it with the <b>ClipSlicer 연결</b> extension. It reuses that browser's login and request details,
+so members-only or age-restricted streams you can watch can also be saved.</p>
+<p><b>Install (once)</b>: <b>File ▸ Browser extension link…</b> → <b>Open extension folder</b>. Type <code>chrome://extensions</code>
+(Edge: <code>edge://extensions</code>) in the address bar → turn on <b>Developer mode</b> → <b>Load unpacked</b> → choose that folder.</p>
+<p><b>Use</b>: <b>play</b> the stream or video → ClipSlicer icon in the toolbar (a red number shows how many streams were found) → <b>녹화/받기</b> (Record/Get; the extension popup is in Korean).
+ClipSlicer comes to the front and starts right away; live streams record until you press <b>● Stop recording (save)</b>.
+For sites with address support such as YouTube or Chzzk, <b>이 페이지 주소 보내기</b> (Send this page, with login) downloads it with your login cookies.</p>
+<div class="tip">Data only travels inside this PC (127.0.0.1) and ClipSlicer only accepts requests from this extension. ClipSlicer must be running.
+DRM-protected videos can't be downloaded. Use it to archive your own streams or streams you have permission to keep.</div>
+
 <h2>Stream bookmark mode</h2>
 <p><b>File ▸ Stream bookmark mode…</b>. A small always-on-top window appears. While streaming or recording, press the <b>global hotkey</b> (default <kbd>Ctrl+Alt+B</kbd>)
 whenever a moment is worth clipping and the time is recorded. It works even when OBS or a game is in front. Choose between <kbd>Ctrl+Alt+B</kbd> / <kbd>Ctrl+Alt+M</kbd> / <kbd>Ctrl+Shift+B</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd>;

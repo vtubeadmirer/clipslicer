@@ -77,5 +77,8 @@ foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
   Write-Host "검증 OK: $first"
 }
 if (-not (Test-Path (Join-Path $internal "PySide6\QtWebEngineProcess.exe"))) { throw "QtWebEngineProcess.exe 가 번들되지 않았습니다 (내장 브라우저)" }
+# 브라우저 확장 'ClipSlicer 연결': 사용자가 '압축해제된 확장 프로그램 로드' 로 고를 폴더 (exe 옆)
+Copy-Item browser_extension (Join-Path $app "browser_extension") -Recurse -Force
+if (-not (Test-Path (Join-Path $app "browser_extension\manifest.json"))) { throw "browser_extension 이 복사되지 않았습니다" }
 $size = (Get-ChildItem $app -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("완료: $app\ClipSlicer.exe  ({0:N0} MB)" -f $size)

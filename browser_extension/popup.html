@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 340px; margin: 0; padding: 12px; font: 13px "Segoe UI", "Malgun Gothic", sans-serif; background: #25252a; color: #e4e4e8; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .status { padding: 6px 8px; border-radius: 4px; margin-bottom: 10px; background: #33333a; }
+  .status.ok { background: #1f3a24; }
+  .status.bad { background: #4a2323; }
+  .item { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid #3a3a42; }
+  .item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .age { color: #9a9aa2; font-size: 11px; }
+  button { background: #42a5f5; color: #0a0a0a; border: 0; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-weight: 600; }
+  button.secondary { background: #44444c; color: #e4e4e8; font-weight: 400; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { color: #9a9aa2; font-size: 12px; margin: 8px 0 0; line-height: 1.4; }
+  .msg { margin-top: 8px; min-height: 1em; }
+</style>
+</head>
+<body>
+<h1>ClipSlicer 로 보내기</h1>
+<div id="status" class="status">ClipSlicer 확인 중…</div>
+<div id="streams"></div>
+<div style="margin-top:10px"><button id="page" class="secondary">이 페이지 주소 보내기 (로그인 포함)</button></div>
+<div id="msg" class="msg"></div>
+<p class="hint">방송·영상을 <b>재생한 뒤</b> 위 목록에서 고르세요. 목록이 비어 있으면 재생 버튼을 누르고 다시 여세요.<br>
+정보는 이 PC 의 ClipSlicer(127.0.0.1)로만 갑니다. DRM 으로 보호된 영상은 받을 수 없습니다.</p>
+<script src="popup.js"></script>
+</body>
+</html>

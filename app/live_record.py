@@ -80,6 +80,39 @@ def ffmpeg_header_arg(referer: str = "", cookie: str = "") -> str:
     return "".join(f"{k}: {v}\r\n" for k, v in h.items())
 
 
+def browser_headers(headers: dict) -> dict:
+    """브라우저 확장이 넘긴 실제 요청 헤더 + 빠진 User-Agent 보충."""
+    h = dict(headers or {})
+    if not any(k.lower() == "user-agent" for k in h):
+        h["User-Agent"] = UA
+    return h
+
+
+def split_user_agent(headers: dict) -> tuple[str, str]:
+    """(User-Agent, ffmpeg -headers 문자열). ffmpeg 는 UA 를 -user_agent 로 따로 받는다."""
+    ua = UA
+    lines = []
+    for k, v in headers.items():
+        if k.lower() == "user-agent":
+            ua = v
+        else:
+            lines.append(f"{k}: {v}\r\n")
+    return ua, "".join(lines)
+
+
+def write_cookies_txt(cookies: list[dict], path: str) -> str:
+    """[{domain, path, secure, expiry, name, value}] → Netscape cookies.txt (yt-dlp/live_record 용)."""
+    lines = ["# Netscape HTTP Cookie File", "# ClipSlicer 가 저장 (로그인 정보가 들어 있으니 공유 금지)"]
+    for c in cookies:
+        dom = c["domain"]
+        lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
+                                "TRUE" if c.get("secure") else "FALSE", str(int(c.get("expiry") or 0)),
+                                c["name"], c["value"]]))
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
 def ytdlp_cookie_opts(cookies: str) -> dict:
     """'' | 브라우저 이름 | cookies.txt 경로 → yt-dlp 옵션."""
     c = (cookies or "").strip()
@@ -186,9 +219,10 @@ class LiveRecorder:
     """ffmpeg 로 HLS 를 .ts 에 그대로 저장. stop() 은 q 를 보내 정상 종료시킨다."""
 
     def __init__(self, url: str, dst_ts: str, referer: str = "", cookie: str = "",
-                 input_args: list[str] | None = None):
+                 input_args: list[str] | None = None, headers: dict | None = None):
         self.url, self.dst_ts = url, dst_ts
         self.referer, self.cookie = referer, cookie
+        self.headers = headers  # 브라우저에서 받은 요청 헤더 그대로 (있으면 referer/cookie 대신)
         self.input_args = input_args or []
         self.proc: subprocess.Popen | None = None
         self.out_time = 0.0
@@ -199,8 +233,11 @@ class LiveRecorder:
     def command(self) -> list[str]:
         cmd = [find_tool("ffmpeg"), "-hide_banner", "-nostats", "-loglevel", "warning", "-y"]
         if self.url.lower().startswith("http"):
-            cmd += ["-user_agent", UA]
-            hdr = ffmpeg_header_arg(self.referer, self.cookie)
+            if self.headers:
+                ua, hdr = split_user_agent(self.headers)
+            else:
+                ua, hdr = UA, ffmpeg_header_arg(self.referer, self.cookie)
+            cmd += ["-user_agent", ua]
             if hdr:
                 cmd += ["-headers", hdr]
             cmd += ["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "10",

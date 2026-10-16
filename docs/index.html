@@ -65,7 +65,7 @@
   <div class="grp">편의 기능</div>
   <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#youtube">유튜브 올리기</a><a href="#save">자동 저장 · 설정</a>
   <div class="grp">방송인용 (0.8)</div>
-  <a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
+  <a href="#extension">브라우저 확장 연결</a><a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
   <div class="grp">기타</div>
   <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
 </nav>
@@ -319,6 +319,18 @@ m4a 는 원본이 AAC 면 무손실 복사, 아니면 AAC 192 kbps 로 변환. m
 <div class="card warn"><b>비공개로만 올라갑니다.</b> 구글 심사(앱 검증) 전의 프로젝트로 올린 영상은 비공개로 고정됩니다. 메타데이터를 다 채워 올린 뒤 유튜브 스튜디오에서 공개 범위만 바꾸세요.
 하루 업로드 한도는 API 할당량 기준 약 6개입니다.</div>
 <p>올리기 창의 <b>프리셋</b>, <b>예약 공개</b>, <b>파일 ▸ 업로드 이력</b>은 <a href="#publish">프리셋 · 예약 · 이력</a> 항목에서 설명합니다.</p>
+
+<h2 id="extension">브라우저 확장 연결 (크롬 · 엣지 · 웨일)</h2>
+<p>내장 브라우저에서 구글 로그인이 막히거나(구글은 앱 안의 브라우저 로그인을 막습니다) 주소로 받을 수 없는 사이트는
+<b>평소 쓰는 브라우저</b>에서 재생하고 확장 프로그램 <b>ClipSlicer 연결</b>로 보냅니다. 그 브라우저의 로그인 · 요청 정보를 그대로 쓰므로
+성인 인증 · 멤버십 방송도 내가 볼 수 있으면 받을 수 있습니다.</p>
+<p><b>설치 (한 번만)</b>: <b>파일 ▸ 브라우저 확장 연결…</b> → <b>확장 폴더 열기</b>. 브라우저 주소창에 <code>chrome://extensions</code>
+(엣지는 <code>edge://extensions</code>) → 오른쪽 위 <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b> → 그 폴더 선택.</p>
+<p><b>사용</b>: 방송 · 영상 페이지에서 <b>재생</b> → 툴바의 ClipSlicer 아이콘(잡힌 스트림 수가 빨간 숫자로 뜸) → 목록에서 <b>녹화/받기</b>.
+ClipSlicer 가 앞으로 나와 바로 받기 시작하고, 라이브면 <b>● 녹화 중지 (저장)</b>을 누를 때까지 녹화합니다.
+유튜브 · 치지직처럼 주소로 받을 수 있는 사이트는 <b>이 페이지 주소 보내기 (로그인 포함)</b>로 로그인 쿠키와 함께 받을 수 있습니다.</p>
+<div class="tip">정보는 이 PC 안(127.0.0.1)에서만 오가고, ClipSlicer 는 우리 확장에서 온 요청만 받습니다. ClipSlicer 가 켜져 있어야 합니다.
+DRM 이 걸린 영상은 받을 수 없습니다. 본인 방송이나 허락받은 방송의 보관 용도로 쓰세요.</div>
 
 <h2 id="bookmark">방송 북마크 모드</h2>
 <p>방송·녹화 중에 "이거 나중에 클립" 싶은 순간을 기록해 두는 기능입니다. <b>파일 ▸ 방송 북마크 모드…</b> 를 열면 항상 위에 떠 있는 작은 창이 나오고,

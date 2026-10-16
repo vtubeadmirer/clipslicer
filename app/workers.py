@@ -111,10 +111,12 @@ class DownloadWorker(QThread):
     liveStarted = Signal()   # m3u8 라이브 녹화를 시작함 → 대화상자가 '녹화 중지' 버튼을 보여 준다
 
     def __init__(self, url: str, out_dir: str, quality: str = "best", section: tuple[float, float] | None = None,
-                 parent=None, cookies: str = "", referer: str = ""):
+                 parent=None, cookies: str = "", referer: str = "", headers: dict | None = None, title: str = ""):
         super().__init__(parent)
         self.url, self.out_dir, self.quality, self.section = url, out_dir, quality, section
         self.cookies, self.referer = cookies, referer
+        self.headers = headers or {}  # 브라우저 확장이 넘긴 실제 요청 헤더 (쿠키 · 인증 포함) — 있으면 그대로 다시 보낸다
+        self.title = title
         self._cancel = False
         self._stop = False
         self._recorder = None
@@ -155,7 +157,9 @@ class DownloadWorker(QThread):
             opts["ffmpeg_location"] = ffdir
         from . import live_record
         opts.update(live_record.ytdlp_cookie_opts(self.cookies))
-        if self.referer:
+        if self.headers:
+            opts["http_headers"] = live_record.browser_headers(self.headers)
+        elif self.referer:
             hdr = live_record.request_headers(self.referer)
             hdr.pop("User-Agent", None)
             opts["http_headers"] = hdr
@@ -215,13 +219,16 @@ class DownloadWorker(QThread):
         from . import live_record as lr
         from .segments import safe_filename
         self.progress.emit(0.0, tr("재생 목록 확인 중…"))
-        cookie = lr.cookie_header(self.cookies, self.url)
-        headers = lr.request_headers(self.referer, cookie)
+        if self.headers:
+            cookie, headers = "", lr.browser_headers(self.headers)
+        else:
+            cookie = lr.cookie_header(self.cookies, self.url)
+            headers = lr.request_headers(self.referer, cookie)
         max_h = int(self.quality) if self.quality in ("1080", "720", "480") else 0
         media_url, live = lr.resolve(self.url, headers, max_h)
         host = urllib.parse.urlparse(self.url).netloc.split(":")[0] or "stream"
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        base = os.path.join(self.out_dir, safe_filename(f"{host} {stamp}"))
+        base = os.path.join(self.out_dir, safe_filename(f"{(self.title or host)[:80]} {stamp}"))
         if not live:
             LOG.info("m3u8 VOD 받기: %s", media_url[:120])
             opts = self._base_opts(hook)
@@ -233,7 +240,7 @@ class DownloadWorker(QThread):
             return path or ""
         LOG.info("라이브 녹화 시작: %s", media_url[:120])
         ts = base + ".ts"
-        rec = lr.LiveRecorder(media_url, ts, self.referer, cookie)
+        rec = lr.LiveRecorder(media_url, ts, self.referer, cookie, headers=headers if self.headers else None)
         self._recorder = rec
         rec.start()
         self.liveStarted.emit()
