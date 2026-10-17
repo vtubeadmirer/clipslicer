@@ -167,4 +167,16 @@ async function probe(s) {
   const pb = $("page");
   pb.disabled = !connected || !/^https?:/.test(tab.url || "");
   pb.onclick = async () => send({ kind: "page", url: tab.url, title: tab.title, cookies: await siteCookies(tab.url) }, pb);
+  const cb = $("clip");
+  cb.disabled = !connected;
+  cb.onclick = async () => {
+    try {
+      const r = await fetch(SERVER + "/clip", { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ page: tab.url }) });
+      say(r.ok ? "✂ 클립을 요청했습니다. ClipSlicer 알림을 확인하세요 (녹화 중이어야 합니다)."
+               : "클립 요청 실패 (HTTP " + r.status + ") — ClipSlicer 를 최신으로 업데이트하세요.");
+    } catch (e) {
+      say("ClipSlicer 가 꺼져 있습니다.");
+    }
+  };
 })();

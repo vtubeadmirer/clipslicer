@@ -127,6 +127,18 @@ def test_bridge_server_checks_origin(running_bridge):
     assert _call(b.port, "/nope", bridge.ALLOWED_ORIGIN)[0] == 404
 
 
+def test_clip_request(running_bridge):
+    """확장 단축키(Alt+Shift+C) → /clip → clipRequested(page). 확장이 아니면 거부, 이상한 주소는 비움."""
+    b, _ = running_bridge
+    got = []
+    b.clipRequested.connect(lambda d: got.append(d))
+    assert _call(b.port, "/clip", "https://evil.example", b'{"page": "https://x"}')[0] == 403
+    assert _call(b.port, "/clip", bridge.ALLOWED_ORIGIN, json.dumps({"page": "https://chzzk.naver.com/live/abc"}).encode())[0] == 200
+    assert _call(b.port, "/clip", bridge.ALLOWED_ORIGIN, json.dumps({"page": "javascript:alert(1)"}).encode())[0] == 200
+    _pump(lambda: len(got) >= 2)
+    assert got == [{"page": "https://chzzk.naver.com/live/abc"}, {"page": ""}]
+
+
 def test_bridge_port_in_use_is_reported():
     from PySide6.QtCore import QCoreApplication
     QCoreApplication.instance() or QCoreApplication([])

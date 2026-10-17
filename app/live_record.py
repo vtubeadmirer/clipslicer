@@ -360,6 +360,26 @@ class LiveRecorder:
         threading.Thread(target=_kill_later, daemon=True).start()
 
 
+def clip_recent(ts_path: str, end_t: float, seconds: float, dst_mp4: str) -> str:
+    """녹화 중인(계속 자라는) .ts 에서 end_t 초까지의 마지막 seconds 초를 mp4 로 복사 (재인코딩 없음).
+
+    실시간 클립('지난 30초'). 시작은 키프레임에 맞춰 1~2초 앞당겨질 수 있다. 성공하면 dst_mp4, 실패하면 LiveError.
+    """
+    end_t = max(0.0, end_t)
+    start = max(0.0, end_t - seconds)
+    if end_t - start < 1.0:
+        raise LiveError(tr("아직 녹화된 분량이 부족합니다"))
+    os.makedirs(os.path.dirname(dst_mp4) or ".", exist_ok=True)
+    cmd = [find_tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-i", ts_path,
+           "-t", f"{end_t - start:.3f}", "-map", "0:v?", "-map", "0:a?", "-c", "copy",
+           "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", dst_mp4]
+    r = subprocess.run(cmd, capture_output=True, creationflags=CREATE_NO_WINDOW, stdin=subprocess.DEVNULL, timeout=120)
+    if r.returncode != 0 or not os.path.isfile(dst_mp4) or os.path.getsize(dst_mp4) < 1024:
+        lines = r.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise LiveError(tr("클립을 만들지 못했습니다: {0}").format(lines[-1] if lines else "?"))
+    return dst_mp4
+
+
 def remux_to_mp4(src_ts: str, dst_mp4: str) -> bool:
     cmd = [find_tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-i", src_ts,
            "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-movflags", "+faststart", dst_mp4]

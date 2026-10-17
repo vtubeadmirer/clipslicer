@@ -133,7 +133,7 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/ping":   # 확장은 POST 로 확인한다 (GET 에는 Origin 이 안 붙음)
             self._ping()
             return
-        if route not in ("/send", "/probe"):
+        if route not in ("/send", "/probe", "/clip"):
             self._reply(404, {"error": "not found"})
             return
         try:
@@ -144,6 +144,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._reply(413, {"error": "too large"})
             return
         body = self.rfile.read(n)
+        if route == "/clip":   # 확장 단축키: 이 탭의 방송 녹화에서 '방금 지나간 N초' 클립
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                data = {}
+            page = str(data.get("page") or "") if isinstance(data, dict) else ""
+            if urllib.parse.urlparse(page).scheme not in ("http", "https"):
+                page = ""
+            LOG.info("브라우저 확장에서 클립 요청: %s", page[:120])
+            self.bridge.clipRequested.emit({"page": page})
+            self._reply(200, {"ok": True})
+            return
         if route == "/probe":   # 팝업이 목록마다 '무엇인지' 묻는다 (전체 화질/한 화질, 실시간/다시보기, DRM)
             try:
                 req = parse_request(body, require_kind=False)
@@ -178,6 +190,7 @@ class _ExclusiveServer(ThreadingHTTPServer):
 class Bridge(QObject):
     """received(dict) 는 GUI 스레드에서 받는다 (Qt 가 스레드 사이 신호를 큐로 넘김)."""
     received = Signal(dict)
+    clipRequested = Signal(dict)   # {page}
 
     def __init__(self, parent=None, port: int = PORT):
         super().__init__(parent)

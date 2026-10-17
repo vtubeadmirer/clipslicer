@@ -65,7 +65,7 @@
   <div class="grp">편의 기능</div>
   <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#youtube">유튜브 올리기</a><a href="#save">자동 저장 · 설정</a>
   <div class="grp">방송인용 (0.8)</div>
-  <a href="#extension">브라우저 확장 연결</a><a href="#downloads">동시 녹화</a><a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
+  <a href="#extension">브라우저 확장 연결</a><a href="#downloads">동시 녹화</a><a href="#clips">실시간 클립</a><a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
   <div class="grp">기타</div>
   <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
 </nav>
@@ -338,6 +338,19 @@ DRM 이 걸린 영상은 받을 수 없습니다. 본인 방송이나 허락받�
 편집 중인 영상이 있으면 끝난 파일은 파일 목록에만 추가되어 편집 화면을 빼앗지 않습니다. 같은 방송을 두 번 보내면 중복으로 막습니다.</p>
 <div class="tip">ClipSlicer 를 닫을 때 녹화가 진행 중이면 지금까지 받은 분량을 저장하고 닫을지 묻습니다. 녹화 중에는 업데이트를 적용하지 않습니다.
 동시에 여러 개를 받으면 그만큼 인터넷 속도와 디스크 공간이 필요합니다 (1080p 방송 하나에 시간당 약 3~4 GB).</div>
+
+<h2 id="clips">실시간 클립 (방금 그 장면)</h2>
+<p>녹화 중인 방송에서 <b>방금 지나간 장면</b>을 바로 mp4 클립으로 저장합니다. 녹화 · 다운로드 창의 녹화 줄에 있는 <b>✂ 클립</b>,
+<b>전역 단축키</b>(기본 <kbd>Ctrl+Alt+C</kbd>, 게임 · 브라우저가 앞에 있어도 됨), 또는 브라우저 확장 단축키 <kbd>Alt+Shift+C</kbd> /
+팝업의 <b>✂ 방금 장면 클립</b>을 쓰세요. 클립은 <code>&lt;녹화 이름&gt;_clips</code> 폴더에 쌓이고 알림이 뜹니다.</p>
+<ul>
+ <li><b>클립 길이</b> — 지난 15 · 30 · 60 · 90 · 120초</li>
+ <li><b>지연 보정</b> — 브라우저 화면은 실제 방송보다 몇 초 늦습니다(치지직 저지연 2~3초, 일반 5~10초). 그만큼 클립 끝을 앞당겨 내가 본 장면에서 끝나게 합니다.</li>
+ <li><b>단축키</b> — Ctrl+Alt+C / Ctrl+Alt+X / Ctrl+Shift+X / F8 / 끔. 녹화 중일 때만 등록되어 평소에는 다른 프로그램의 단축키를 빼앗지 않습니다.</li>
+ <li>여러 방송을 녹화 중이면 전역 단축키는 <b>가장 최근에 시작한 녹화</b>에서, 확장 단축키는 <b>지금 보고 있는 탭의 방송</b>에서 땁니다.</li>
+</ul>
+<div class="tip">재인코딩 없이 잘라 바로 저장되며, 시작점은 키프레임에 맞춰 1~2초 앞당겨질 수 있습니다. 녹화는 멈추지 않습니다.
+확장 단축키는 <code>chrome://extensions/shortcuts</code> 에서 바꿀 수 있습니다.</div>
 
 <h2 id="bookmark">방송 북마크 모드</h2>
 <p>방송·녹화 중에 "이거 나중에 클립" 싶은 순간을 기록해 두는 기능입니다. <b>파일 ▸ 방송 북마크 모드…</b> 를 열면 항상 위에 떠 있는 작은 창이 나오고,

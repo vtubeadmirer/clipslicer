@@ -147,6 +147,7 @@ class MainWindow(QMainWindow):
         self.downloads_window = None   # 녹화 · 다운로드 목록 (처음 쓸 때 만든다)
         self.bridge = Bridge(self)   # 브라우저 확장 'ClipSlicer 연결' 수신 (127.0.0.1 전용)
         self.bridge.received.connect(self._on_browser_request)
+        self.bridge.clipRequested.connect(self._on_clip_request)
         self.bridge.start()
         self._restore_settings()
         self._start_gpu_detect()
@@ -785,6 +786,14 @@ class MainWindow(QMainWindow):
         sc("Ctrl+Shift+Down", lambda: self._move_segment_order(self.table.currentRow(), 1))
         sc("N", lambda: self._edit_segment_name(self.current.segment_at(self.player.position) if self.current else -1))
         sc("F2", lambda: self._edit_segment_name(self.table.currentRow()))
+        # 타임라인 확대 · 마커 미세 이동 (프리미어식)
+        sc("=", lambda: self.timeline.canvas.zoom(1.5))
+        sc("-", lambda: self.timeline.canvas.zoom(1 / 1.5))
+        sc("Z", lambda: self.timeline.canvas.zoom_to_segment())
+        sc("Alt+Left", lambda: self.nudge_marker(-1))
+        sc("Alt+Right", lambda: self.nudge_marker(1))
+        sc("Shift+Alt+Left", lambda: self.nudge_marker(-10))
+        sc("Shift+Alt+Right", lambda: self.nudge_marker(10))
 
     def show_help(self, page: int = 0):
         HelpDialog(self, page).exec()
@@ -1336,6 +1345,27 @@ class MainWindow(QMainWindow):
         else:
             self.timeline.canvas.update()
             self._refresh_table()
+
+    def nudge_marker(self, frames: int):
+        """선택한 마커(없으면 재생 위치에 가장 가까운 마커)를 frames 프레임 옮긴다 (실행 취소 가능)."""
+        if not self.current or not self.current.markers:
+            return
+        canvas = self.timeline.canvas
+        idx = canvas.selected_marker
+        if not (0 <= idx < len(self.current.markers)):
+            pos = self.player.position
+            idx = min(range(len(self.current.markers)), key=lambda i: abs(self.current.markers[i] - pos))
+            canvas.selected_marker = idx
+        fps = self.current.fps if self.current.fps > 0 else 30.0
+        old = self.current.markers[idx]
+        self.current.push_undo()
+        self.current.move_marker(idx, round((old + frames / fps) * fps) / fps)   # 키프레임 자석은 쓰지 않음 (미세 조정)
+        new = self.current.markers[idx]
+        self._set_loop(-1)
+        self.player.seek(new)
+        self._changed()
+        from .timeline import fmt_timecode
+        self.statusBar().showMessage(tr("마커 {0}: {1} ({2:+d}프레임)").format(idx + 1, fmt_timecode(new, fps), frames), 2500)
 
     def clear_markers(self):
         if not self.current or not self.current.markers:
@@ -1891,8 +1921,9 @@ class MainWindow(QMainWindow):
     def show_downloads(self) -> DownloadsWindow:
         w = self.downloads_window
         if w is None:
-            w = DownloadsWindow(self)
+            w = DownloadsWindow(self, settings=self.settings)
             w.fileReady.connect(self._on_download_file)
+            w.clipSaved.connect(self._on_clip_saved)
             w.openRequested.connect(self._open_downloaded)
             w.countChanged.connect(self._on_download_count)
             self.downloads_window = w
@@ -1908,6 +1939,19 @@ class MainWindow(QMainWindow):
             self.notifier.notify(tr("녹화 · 다운로드"), tr("이미 녹화 · 다운로드 중인 방송입니다: {0}").format(params.get("title") or params["url"][:80]))
             return False
         return True
+
+    def _on_clip_saved(self, path: str, error: str):
+        if path:
+            self.notifier.notify(tr("✂ 클립 저장"), os.path.basename(path))
+        else:
+            self.notifier.notify(tr("✂ 클립"), error)
+
+    def _on_clip_request(self, req: dict):
+        """브라우저 확장 단축키(Alt+Shift+C): 그 탭의 방송 녹화에서 클립."""
+        if self.downloads_window is None or not self.downloads_window.live_rows():
+            self.notifier.notify(tr("✂ 클립"), tr("녹화 중인 방송이 없습니다. 먼저 확장에서 '녹화/받기' 를 누르세요."))
+            return
+        self.downloads_window.clip_for_page(req.get("page") or "")
 
     def downloads_active(self) -> int:
         return self.downloads_window.active_count() if self.downloads_window else 0

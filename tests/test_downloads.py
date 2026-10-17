@@ -120,6 +120,63 @@ print("RESULT=" + json.dumps(res, ensure_ascii=True))
 """
 
 
+_CLIP_SCRIPT = r"""
+import json, os, sys, time
+sys.path.insert(0, sys.argv[1])
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtWidgets import QApplication
+from app.downloads import DownloadsWindow, LIVE
+base, out = sys.argv[2], sys.argv[3]
+app = QApplication([])
+w = DownloadsWindow()
+w.cb_hotkey.setCurrentIndex(w.cb_hotkey.findData(""))   # 테스트에서 전역 단축키를 잡지 않게
+w.cb_len.setCurrentIndex(w.cb_len.findData(15))
+saved, res = [], {}
+w.clipSaved.connect(lambda p, e: saved.append([p, e]))
+
+def wait(cond, sec):
+    t0 = time.time()
+    while time.time() - t0 < sec:
+        app.processEvents()
+        if cond():
+            return True
+        time.sleep(0.05)
+    return False
+
+res["no_live"] = (w.clip_latest() is False) and bool(saved) and saved[-1][0] == "" and saved[-1][1] != ""
+saved.clear()
+p = {"url": base + "/live1/index.m3u8", "out_dir": out, "quality": "best", "section": None, "cookies": "", "referer": "",
+     "headers": {"User-Agent": "t"}, "title": "방송", "page": "https://site/live/1", "cookie_file": ""}
+r = w.add(p)
+wait(lambda: r.state == LIVE, 30)
+wait(lambda: False, 6)                                  # 6초쯤 녹화된 뒤
+res["clip_started"] = w.clip_for_page("https://site/live/1?x=1")
+wait(lambda: saved, 30)
+res["saved"] = saved[:]
+res["row_clips"] = list(r.clips)
+r.stop_recording()
+wait(lambda: not r.active, 30)
+res["final"] = r.state
+print("RESULT=" + json.dumps(res, ensure_ascii=True))
+"""
+
+
+def test_realtime_clip_while_recording(streams, tmp_path):
+    from app import ffmpeg_tools as ft
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", QT_QPA_PLATFORM="offscreen")
+    r = subprocess.run([sys.executable, "-c", _CLIP_SCRIPT, ROOT, streams, str(tmp_path)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180, env=env)
+    line = next((l for l in r.stdout.splitlines() if l.startswith("RESULT=")), None)
+    assert line, (r.returncode, r.stdout[-800:], r.stderr[-1500:])
+    res = json.loads(line[len("RESULT="):])
+    assert res["no_live"] and res["clip_started"] and res["final"] == "done", res
+    assert len(res["saved"]) == 1 and res["saved"][0][0] and not res["saved"][0][1], res
+    clip = res["saved"][0][0]
+    assert res["row_clips"] == [clip] and os.path.basename(os.path.dirname(clip)).endswith("_clips")
+    info = ft.probe(clip)
+    assert info["has_audio"] and 2.0 < info["duration"] <= 16.5, info   # 녹화된 만큼(≤15초 + 키프레임 여유)
+
+
 def test_concurrent_recordings(streams, tmp_path):
     from app import ffmpeg_tools as ft
     env = dict(os.environ, PYTHONIOENCODING="utf-8", QT_QPA_PLATFORM="offscreen")

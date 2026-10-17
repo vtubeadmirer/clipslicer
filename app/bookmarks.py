@@ -26,7 +26,7 @@ WM_HOTKEY = 0x0312
 HOTKEY_ID = 0xC1B5                      # 이 앱이 쓰는 단축키 id (임의 값)
 MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_NOREPEAT = 0x0001, 0x0002, 0x0004, 0x4000
 ERROR_HOTKEY_ALREADY_REGISTERED = 1409
-VK_F9, VK_F10 = 0x78, 0x79
+VK_F8, VK_F9, VK_F10 = 0x77, 0x78, 0x79
 
 # (표시 이름, modifiers, 가상 키 코드)
 HOTKEYS: list[tuple[str, int, int]] = [
@@ -37,6 +37,14 @@ HOTKEYS: list[tuple[str, int, int]] = [
     ("F10", 0, VK_F10),
 ]
 DEFAULT_HOTKEY = "Ctrl+Alt+B"
+# 실시간 클립('지난 N초') 단축키 — 북마크와 따로 등록한다 (다른 id)
+CLIP_HOTKEY_ID = 0xC1B6
+CLIP_HOTKEYS: list[tuple[str, int, int]] = [
+    ("Ctrl+Alt+C", MOD_CONTROL | MOD_ALT, ord("C")),
+    ("Ctrl+Alt+X", MOD_CONTROL | MOD_ALT, ord("X")),
+    ("Ctrl+Shift+X", MOD_CONTROL | MOD_SHIFT, ord("X")),
+    ("F8", 0, VK_F8),
+]
 HOTKEY_NAMES = [h[0] for h in HOTKEYS]
 SETTINGS_KEY = "bookmark_hotkey"        # QSettings 에 저장하는 단축키 이름
 MAX_LIST = 200                          # 창에 보여 주는 최근 북마크 수
@@ -131,9 +139,10 @@ def fmt_bookmark_time(ts: float) -> str:
 class _HotkeyFilter(QAbstractNativeEventFilter):
     """WM_HOTKEY 를 잡아 콜백을 부른다 (GUI 스레드)."""
 
-    def __init__(self, callback: Callable[[], None]):
+    def __init__(self, callback: Callable[[], None], hotkey_id: int = HOTKEY_ID):
         super().__init__()
         self.callback = callback
+        self.hotkey_id = hotkey_id
 
     def nativeEventFilter(self, event_type, message):
         try:
@@ -143,7 +152,7 @@ class _HotkeyFilter(QAbstractNativeEventFilter):
         if et in (b"windows_generic_MSG", b"windows_dispatcher_MSG"):
             import ctypes.wintypes
             msg = ctypes.wintypes.MSG.from_address(int(message))
-            if msg.message == WM_HOTKEY and int(msg.wParam) == HOTKEY_ID:
+            if msg.message == WM_HOTKEY and int(msg.wParam) == self.hotkey_id:
                 try:
                     self.callback()
                 except Exception:
@@ -155,8 +164,10 @@ class _HotkeyFilter(QAbstractNativeEventFilter):
 class GlobalHotkey:
     """Windows 전역 단축키 하나를 등록/해제. 다른 프로그램이 앞에 있어도 눌리면 callback 이 불린다."""
 
-    def __init__(self, callback: Callable[[], None]):
+    def __init__(self, callback: Callable[[], None], hotkey_id: int = HOTKEY_ID, table=None):
         self.callback = callback
+        self.hotkey_id = hotkey_id
+        self.table = table if table is not None else HOTKEYS
         self.name = ""
         self._filter: _HotkeyFilter | None = None
         self._registered = False
@@ -174,14 +185,14 @@ class GlobalHotkey:
         self.unregister()
         if not self.available():
             return False, tr("전역 단축키는 Windows 에서만 동작합니다")
-        spec = next((h for h in HOTKEYS if h[0] == name), None)
+        spec = next((h for h in self.table if h[0] == name), None)
         if spec is None:
             return False, tr("알 수 없는 단축키: {0}").format(name)
         _, mods, vk = spec
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.RegisterHotKey.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
         user32.RegisterHotKey.restype = ctypes.c_int
-        if not user32.RegisterHotKey(None, HOTKEY_ID, mods | MOD_NOREPEAT, vk):
+        if not user32.RegisterHotKey(None, self.hotkey_id, mods | MOD_NOREPEAT, vk):
             err = ctypes.get_last_error()
             LOG.warning("RegisterHotKey 실패 %s (오류 %d)", name, err)
             if err == ERROR_HOTKEY_ALREADY_REGISTERED:
@@ -189,7 +200,7 @@ class GlobalHotkey:
             return False, tr("단축키 등록 실패 ({0}, 오류 {1})").format(name, err)
         app = QCoreApplication.instance()
         if app is not None:
-            self._filter = _HotkeyFilter(self.callback)
+            self._filter = _HotkeyFilter(self.callback, self.hotkey_id)
             app.installNativeEventFilter(self._filter)
         self.name = name
         self._registered = True
@@ -200,7 +211,7 @@ class GlobalHotkey:
         if not self._registered:
             return
         try:
-            ctypes.WinDLL("user32").UnregisterHotKey(None, HOTKEY_ID)
+            ctypes.WinDLL("user32").UnregisterHotKey(None, self.hotkey_id)
         except (OSError, AttributeError):
             pass
         app = QCoreApplication.instance()

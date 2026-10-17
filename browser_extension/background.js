@@ -53,3 +53,27 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   }
 });
 chrome.tabs.onRemoved.addListener(tabId => chrome.storage.session.remove("tab" + tabId));
+
+// 단축키(기본 Alt+Shift+C): 이 탭의 방송을 ClipSlicer 가 녹화 중이면 '방금 지나간 N초' 클립
+chrome.commands.onCommand.addListener(async command => {
+  if (command !== "clip") return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let text = "✂";
+  try {
+    const r = await fetch("http://127.0.0.1:47851/clip", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                         body: JSON.stringify({ page: (tab && tab.url) || "" }) });
+    if (!r.ok) text = "!";
+  } catch {
+    text = "!";   // ClipSlicer 가 꺼져 있음
+  }
+  if (tab) {
+    chrome.action.setBadgeText({ tabId: tab.id, text });
+    chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: text === "✂" ? "#2e7d32" : "#c62828" });
+    setTimeout(async () => {   // 잠깐 보여 준 뒤 원래 숫자로
+      const key = "tab" + tab.id;
+      const list = (await chrome.storage.session.get(key))[key] || [];
+      chrome.action.setBadgeText({ tabId: tab.id, text: list.length ? String(list.length) : "" });
+      chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#e53935" });
+    }, 2000);
+  }
+});

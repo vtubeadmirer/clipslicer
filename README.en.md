@@ -43,12 +43,12 @@ Releases that only change the code arrive as a **lite update** of about 20 MB th
 | Area | What you get |
 |---|---|
 | Cutting | Split mode (`S`), clip mode (`I`/`O`), frame stepping, undo/redo, segment names (`N`/`F2`) and **notes**, **merge order** ▲▼, auto-saved project files (`.clipslicer.json`, only for edited videos) |
-| Timeline | Thumbnail strip, audio waveform, **chat reaction graph**, keyframe marks, `Ctrl+wheel` zoom, hover preview, analysis cache, collapsible right panel (`Ctrl+Shift+R`) |
+| Timeline | Thumbnail strip, audio waveform, **chat reaction graph**, keyframe marks, `Ctrl+wheel` / zoom bar down to **individual frames** (timecode ruler), magnetic markers, `Alt+←/→` one-frame nudging, hover preview, analysis cache, collapsible right panel (`Ctrl+Shift+R`) |
 | Auto markers | Silence detection, scene-change detection, **loud moments (laughter, cheering)**, paste timestamps (YouTube chapters, comments), **chat reaction peaks and keyword markers** (CHZZK and YouTube live replays) |
 | Stream bookmarks | **Stream bookmark mode**: a global hotkey (`Ctrl+Alt+B` …) records moments while streaming or recording; open the recording and the bookmarks are offered as markers |
 | Output | Fast (lossless copy), Smart (re-encode only the first second), Precise (full re-encode), **vertical 9:16 Shorts** (crop or **blur background**), video only (no sound), audio only (m4a/mp3), merge segments, filename patterns, GPU encoding (NVENC/QSV/AMF) |
 | Output effects | **Loudness normalization** (-14 LUFS), **burned-in caption**, **burned-in subtitles** (srt/ass/vtt), **watermark** PNG, **intro/outro** videos |
-| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; **Record from site** (sign in once in the built-in browser, the stream is detected when it plays, one-click live recording — e.g. rplay); **record several streams at once** (recordings & downloads list); **browser extension link** (one click sends the stream playing in Chrome/Edge/Whale to ClipSlicer, logged in as you are); direct m3u8 download; start screen with recent work and a sample video |
+| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; **Record from site** (sign in once in the built-in browser, the stream is detected when it plays, one-click live recording — e.g. rplay); **record several streams at once** (recordings & downloads list); **realtime clips** (one hotkey saves the last 30 s while recording); **browser extension link** (one click sends the stream playing in Chrome/Edge/Whale to ClipSlicer, logged in as you are); direct m3u8 download; start screen with recent work and a sample video |
 | Publish | **YouTube upload** of the cut files to your connected channel as private videos (title, description, tags, thumbnail, playlist, resumable, pre-upload limit checks), **upload presets**, **scheduled publish**, **upload history**, **Discord webhook** posting, copy chapter list, save current frame as PNG |
 | Ops | Update notifications with self-replacement (**lite updates**), tray notifications, first-run guide, error log and dialogs, compatibility mode for GPU-less machines, portable settings (`settings.ini`) |
 
@@ -89,7 +89,10 @@ Fast is enough most of the time; use Smart when the shifted start bothers you.
 | R / L | Loop ±2 s around cursor / loop current segment |
 | ↑ ↓ | Previous / next segment |
 | Ctrl+Shift+↑ ↓ | Move earlier / later in the merge order |
-| Ctrl+wheel / Ctrl+0 | Zoom timeline / fit |
+| Ctrl+wheel, = / - / Ctrl+0 | Zoom timeline / fit (zoom all the way for single frames) |
+| Z | Zoom to the segment at the playhead |
+| Alt+← / Alt+→ | Nudge the selected marker one frame (with Shift: 10) |
+| Ctrl+Alt+C | (while recording) clip the moment that just happened |
 | Ctrl+Shift+R | Collapse / expand the right panel |
 | Ctrl+Shift+M / Ctrl+Shift+S / Ctrl+Shift+L | Auto markers: silence · scene change · loud moments |
 | Ctrl+Shift+V / Ctrl+Shift+C | Paste timestamps / chat reaction graph & markers |

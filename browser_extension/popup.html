@@ -25,7 +25,10 @@
 <h1>ClipSlicer 로 보내기</h1>
 <div id="status" class="status">ClipSlicer 확인 중…</div>
 <div id="streams"></div>
-<div style="margin-top:10px"><button id="page" class="secondary">이 페이지 주소 보내기 (로그인 포함)</button></div>
+<div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap">
+  <button id="page" class="secondary">이 페이지 주소 보내기 (로그인 포함)</button>
+  <button id="clip" class="secondary" title="ClipSlicer 가 이 탭의 방송을 녹화 중일 때, 방금 지나간 장면을 클립으로 저장 (단축키 Alt+Shift+C)">✂ 방금 장면 클립</button>
+</div>
 <div id="msg" class="msg"></div>
 <p class="hint">방송·영상을 <b>재생한 뒤</b> 고르세요. 보통 <b>추천</b>을 누르면 됩니다 (전체 화질 목록이면 가장 좋은 화질로 받음). 목록이 비어 있으면 재생 버튼을 누르고 다시 여세요.<br>
 정보는 이 PC 의 ClipSlicer(127.0.0.1)로만 갑니다. DRM 으로 보호된 영상은 받을 수 없습니다.</p>

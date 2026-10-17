@@ -283,6 +283,19 @@ If you are editing a video, finished files are only added to the file list so yo
 <div class="tip">If recordings are running when you close ClipSlicer, it asks whether to save what was recorded so far. Updates are not applied while recording.
 Several downloads at once need that much more bandwidth and disk space (one 1080p stream is roughly 3–4 GB per hour).</div>
 
+<h2>Realtime clips (that moment just now)</h2>
+<p>Save <b>what just happened</b> in a stream you are recording as an mp4 clip right away: the <b>✂ Clip</b> button on the recording row,
+the <b>global hotkey</b> (default <kbd>Ctrl+Alt+C</kbd>, works while a game or browser is in front), or the browser extension shortcut
+<kbd>Alt+Shift+C</kbd> / the popup's clip button. Clips go to the <code>&lt;recording name&gt;_clips</code> folder and you get a notification.</p>
+<ul>
+ <li><b>Clip length</b> — last 15, 30, 60, 90 or 120 seconds</li>
+ <li><b>Delay</b> — what you watch in the browser lags the actual stream (Chzzk low-latency 2–3 s, normal 5–10 s); the clip end is moved back by this much.</li>
+ <li><b>Hotkey</b> — Ctrl+Alt+C / Ctrl+Alt+X / Ctrl+Shift+X / F8 / off. Only registered while recording.</li>
+ <li>With several recordings, the global hotkey clips the <b>most recently started</b> one and the extension shortcut clips the <b>stream in the current tab</b>.</li>
+</ul>
+<div class="tip">Clips are cut without re-encoding, so the start may move back 1–2 seconds to a keyframe. Recording keeps going.
+Change the extension shortcut at <code>chrome://extensions/shortcuts</code>.</div>
+
 <h2>Stream bookmark mode</h2>
 <p><b>File ▸ Stream bookmark mode…</b>. A small always-on-top window appears. While streaming or recording, press the <b>global hotkey</b> (default <kbd>Ctrl+Alt+B</kbd>)
 whenever a moment is worth clipping and the time is recorded. It works even when OBS or a game is in front. Choose between <kbd>Ctrl+Alt+B</kbd> / <kbd>Ctrl+Alt+M</kbd> / <kbd>Ctrl+Shift+B</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd>;

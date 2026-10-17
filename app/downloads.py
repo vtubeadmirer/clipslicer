@@ -2,16 +2,20 @@
 
 브라우저 확장에서 온 요청과 'URL 에서 열기' 의 받기가 모두 여기에 한 줄씩 추가된다.
 라이브는 줄마다 '■ 녹화 중지 (저장)' 으로 따로 멈출 수 있고, 끝난 파일은 fileReady 로 편집기에 넘긴다.
+
+실시간 클립: 녹화 중인 줄의 '✂ 클립' 또는 전역 단축키(Ctrl+Alt+C 등)로 '방금 지나간 N초' 를 바로 mp4 로 저장한다
+(<녹화 이름>_clips 폴더). 브라우저 화면은 실제 방송보다 몇 초 늦으므로 '지연 보정' 만큼 클립 끝을 앞당긴다.
 """
 from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QScrollArea,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+                               QScrollArea, QVBoxLayout, QWidget)
 
 from .i18n import tr
 
@@ -19,6 +23,8 @@ LOG = logging.getLogger("clipslicer")
 
 RUNNING, LIVE, STOPPING, DONE, FAILED, CANCELLED = "running", "live", "stopping", "done", "failed", "cancelled"
 ACTIVE = (RUNNING, LIVE, STOPPING)
+CLIP_LENGTHS = (15, 30, 60, 90, 120)       # 초
+CLIP_DELAYS = (0, 2, 3, 5, 8, 10, 15)      # 브라우저 화면이 실제 방송보다 늦은 만큼 (초)
 
 
 def _strip(url: str) -> str:
@@ -38,6 +44,9 @@ class DownloadRow(QFrame):
     """한 줄 = 받기 하나. params: url, out_dir, quality, section, cookies, referer, headers, title, page, cookie_file."""
     finished = Signal(object)   # self
     openRequested = Signal(str, str)  # 파일 경로, 원래 페이지 주소
+    clipRequested = Signal(object)    # self — 창이 길이 · 지연 보정을 정해 clip() 을 부른다
+    clipDone = Signal(str, str)       # 클립 경로 (실패면 ''), 오류 — 작업 스레드에서 보냄
+    liveChanged = Signal()
 
     def __init__(self, params: dict, worker_factory, parent=None):
         super().__init__(parent)
@@ -46,6 +55,9 @@ class DownloadRow(QFrame):
         self.path = ""
         self.error = ""
         self.started = time.time()
+        self.live_since = 0.0
+        self.clips: list[str] = []
+        self._clipping = 0
         self.setFrameShape(QFrame.StyledPanel)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 6)
@@ -66,7 +78,16 @@ class DownloadRow(QFrame):
         self.b_folder = QPushButton(tr("폴더"))
         self.b_folder.setVisible(False)
         self.b_folder.clicked.connect(self._open_folder)
-        for b in (self.b_stop, self.b_cancel, self.b_open, self.b_folder):
+        self.b_clip = QPushButton(tr("✂ 클립"))
+        self.b_clip.setToolTip(tr("방금 지나간 장면을 클립으로 저장 (길이 · 지연 보정은 창 위에서)"))
+        self.b_clip.setVisible(False)
+        self.b_clip.clicked.connect(lambda: self.clipRequested.emit(self))
+        self.b_clips = QPushButton()
+        self.b_clips.setToolTip(tr("이 녹화에서 딴 클립 폴더 열기"))
+        self.b_clips.setVisible(False)
+        self.b_clips.clicked.connect(self._open_clips)
+        self.clipDone.connect(self._on_clip_done)
+        for b in (self.b_clip, self.b_clips, self.b_stop, self.b_cancel, self.b_open, self.b_folder):
             b.setFocusPolicy(Qt.NoFocus)
             top.addWidget(b)
         lay.addLayout(top)
@@ -105,9 +126,49 @@ class DownloadRow(QFrame):
 
     def _on_live(self):
         self.state = LIVE
+        self.live_since = time.time()
         self.progress.setRange(0, 0)   # 길이를 모르므로 움직이는 막대
         self.b_stop.setVisible(True)
+        self.b_clip.setVisible(True)
         self.b_cancel.setText(tr("취소 (버리기)"))
+        self.liveChanged.emit()
+
+    # ---- 실시간 클립 ----
+    def clip(self, seconds: float, delay: float = 0.0) -> bool:
+        """녹화 중이면 '지난 seconds 초' 클립을 백그라운드에서 만든다 (지연 보정만큼 끝을 앞당김). 시작했으면 True."""
+        st = self.worker.live_state() if self.state == LIVE else None
+        if st is None:
+            return False
+        ts, out_t, base = st
+        name = f"{os.path.basename(base)} clip {time.strftime('%H%M%S')} ({int(seconds)}s).mp4"
+        dst = os.path.join(base + "_clips", name)
+        self._clipping += 1
+        self.lbl_status.setText(tr("✂ 클립 만드는 중… (지난 {0}초)").format(int(seconds)))
+
+        def run():
+            from . import live_record as lr
+            try:
+                self.clipDone.emit(lr.clip_recent(ts, out_t - delay, seconds, dst), "")
+            except Exception as ex:   # 클립 실패가 녹화를 멈추면 안 된다
+                LOG.warning("클립 실패: %s", ex)
+                self.clipDone.emit("", str(ex))
+        threading.Thread(target=run, name="clip", daemon=True).start()
+        return True
+
+    def _on_clip_done(self, path: str, error: str):
+        self._clipping = max(0, self._clipping - 1)
+        if path:
+            self.clips.append(path)
+            self.b_clips.setText(tr("클립 {0}개").format(len(self.clips)))
+            self.b_clips.setVisible(True)
+            LOG.info("클립 저장: %s", path)
+        if self.state == LIVE:
+            self.lbl_status.setText(tr("✂ 클립 저장: {0}").format(os.path.basename(path)) if path else tr("✂ 클립 실패: {0}").format(error))
+
+    def _open_clips(self):
+        if self.clips:
+            import subprocess
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(self.clips[-1])])
 
     def stop_recording(self):
         """라이브: 그때까지 받은 분량을 저장하고 끝낸다."""
@@ -129,6 +190,7 @@ class DownloadRow(QFrame):
         self.progress.setRange(0, 1000)
         self._cleanup_cookie_file()
         self.b_stop.setVisible(False)
+        self.b_clip.setVisible(False)
         self.b_cancel.setVisible(False)
         if path:
             self.state, self.path = DONE, path
@@ -147,6 +209,7 @@ class DownloadRow(QFrame):
             self.lbl_status.setStyleSheet("color:#ef9a9a;")
         LOG.info("받기 끝 [%s] %s → %s %s", self.state, self.params["url"][:100], path, error[:200])
         self.finished.emit(self)
+        self.liveChanged.emit()
 
     def _cleanup_cookie_file(self):
         p = self.params.get("cookie_file")
@@ -168,16 +231,50 @@ class DownloadsWindow(QWidget):
     fileReady = Signal(str, str)
     openRequested = Signal(str, str)
     countChanged = Signal(int)   # 진행 중인 개수
+    clipSaved = Signal(str, str)   # 클립 경로 (실패면 ''), 오류
 
-    def __init__(self, parent=None, worker_factory=None):
+    def __init__(self, parent=None, worker_factory=None, settings=None):
         super().__init__(parent, Qt.Window)
         self.setWindowTitle(tr("녹화 · 다운로드"))
-        self.resize(640, 420)
+        self.resize(680, 440)
         self.worker_factory = worker_factory or _default_worker
+        self.settings = settings
         self.rows: list[DownloadRow] = []
         lay = QVBoxLayout(self)
         self.lbl_summary = QLabel()
         lay.addWidget(self.lbl_summary)
+        # 실시간 클립 설정
+        bar = QHBoxLayout()
+        bar.addWidget(QLabel(tr("✂ 클립 길이")))
+        self.cb_len = QComboBox()
+        for n in CLIP_LENGTHS:
+            self.cb_len.addItem(tr("지난 {0}초").format(n), n)
+        bar.addWidget(self.cb_len)
+        bar.addWidget(QLabel(tr("지연 보정")))
+        self.cb_delay = QComboBox()
+        for n in CLIP_DELAYS:
+            self.cb_delay.addItem(tr("{0}초").format(n), n)
+        self.cb_delay.setToolTip(tr("브라우저로 보는 화면은 실제 방송보다 몇 초 늦습니다 (치지직 저지연 2~3초, 일반 5~10초).\n"
+                                    "그만큼 클립 끝을 앞당겨 내가 본 장면에서 끝나게 합니다."))
+        bar.addWidget(self.cb_delay)
+        bar.addWidget(QLabel(tr("단축키")))
+        from .bookmarks import CLIP_HOTKEYS, CLIP_HOTKEY_ID, GlobalHotkey
+        self.cb_hotkey = QComboBox()
+        for name, _m, _v in CLIP_HOTKEYS:
+            self.cb_hotkey.addItem(name, name)
+        self.cb_hotkey.addItem(tr("끔"), "")
+        self.cb_hotkey.setToolTip(tr("다른 프로그램(게임 · 브라우저)이 앞에 있어도 누르면 녹화 중인 방송에서 클립을 땁니다.\n"
+                                     "녹화 중일 때만 등록됩니다."))
+        bar.addWidget(self.cb_hotkey)
+        self.lbl_hotkey = QLabel()
+        self.lbl_hotkey.setStyleSheet("color:#9aa0a6; font-size:11px;")
+        bar.addWidget(self.lbl_hotkey, 1)
+        lay.addLayout(bar)
+        self._restore_clip_settings()
+        self.hotkey = GlobalHotkey(self.clip_latest, CLIP_HOTKEY_ID, CLIP_HOTKEYS)
+        for cb in (self.cb_len, self.cb_delay, self.cb_hotkey):
+            cb.currentIndexChanged.connect(self._save_clip_settings)
+        self.cb_hotkey.currentIndexChanged.connect(lambda _i: self._update_hotkey(force=True))
         sa = QScrollArea()
         sa.setWidgetResizable(True)
         sa.setFrameShape(QFrame.NoFrame)
@@ -212,6 +309,9 @@ class DownloadsWindow(QWidget):
         row = DownloadRow(params, self.worker_factory, self)
         row.finished.connect(self._on_row_finished)
         row.openRequested.connect(self.openRequested)
+        row.clipRequested.connect(self._clip_row)
+        row.clipDone.connect(self.clipSaved)
+        row.liveChanged.connect(self._update_hotkey)
         self.rows.append(row)
         self.list_lay.insertWidget(self.list_lay.count() - 1, row)
         LOG.info("받기 추가 (%d개 진행 중): %s", self.active_count(), params["url"][:120])
@@ -222,6 +322,69 @@ class DownloadsWindow(QWidget):
         self._update_summary()
         if row.state == DONE:
             self.fileReady.emit(row.path, row.params.get("page") or row.params["url"])
+
+    # ---- 실시간 클립 ----
+    @property
+    def clip_seconds(self) -> int:
+        return int(self.cb_len.currentData() or 30)
+
+    @property
+    def clip_delay(self) -> int:
+        return int(self.cb_delay.currentData() or 0)
+
+    def _restore_clip_settings(self):
+        s = self.settings
+        if s is None:
+            self.cb_len.setCurrentIndex(CLIP_LENGTHS.index(30))
+            return
+        for cb, key, default in ((self.cb_len, "clip_seconds", 30), (self.cb_delay, "clip_delay", 0),
+                                 (self.cb_hotkey, "clip_hotkey", "Ctrl+Alt+C")):
+            v = s.value(key, default)
+            i = cb.findData(int(v) if isinstance(default, int) and str(v).lstrip("-").isdigit() else v)
+            cb.setCurrentIndex(i if i >= 0 else cb.findData(default))
+
+    def _save_clip_settings(self, *_):
+        if self.settings is not None:
+            self.settings.setValue("clip_seconds", self.clip_seconds)
+            self.settings.setValue("clip_delay", self.clip_delay)
+            self.settings.setValue("clip_hotkey", self.cb_hotkey.currentData() or "")
+
+    def _clip_row(self, row: DownloadRow) -> bool:
+        ok = row.clip(self.clip_seconds, self.clip_delay)
+        if not ok:
+            self.clipSaved.emit("", tr("녹화 중이 아닙니다"))
+        return ok
+
+    def live_rows(self) -> list[DownloadRow]:
+        return sorted((r for r in self.rows if r.state == LIVE), key=lambda r: r.live_since, reverse=True)
+
+    def clip_latest(self) -> bool:
+        """전역 단축키: 가장 최근에 시작한 녹화에서 클립."""
+        rows = self.live_rows()
+        if not rows:
+            self.clipSaved.emit("", tr("녹화 중인 방송이 없습니다"))
+            return False
+        return self._clip_row(rows[0])
+
+    def clip_for_page(self, page: str) -> bool:
+        """브라우저 확장 단축키: 그 탭의 방송을 녹화 중이면 그것에서, 아니면 가장 최근 녹화에서."""
+        rows = self.live_rows()
+        match = [r for r in rows if page and _strip(r.params.get("page") or "") == _strip(page)]
+        if match:
+            return self._clip_row(match[0])
+        return self.clip_latest()
+
+    def _update_hotkey(self, force: bool = False):
+        """녹화 중일 때만 전역 단축키를 잡는다 (다른 프로그램의 단축키를 평소에 빼앗지 않게)."""
+        name = self.cb_hotkey.currentData() or ""
+        want = bool(name) and self.live_count() > 0
+        if want and (force or not self.hotkey.registered or self.hotkey.name != name):
+            ok, why = self.hotkey.register(name)
+            self.lbl_hotkey.setText(tr("{0} 누르면 클립").format(name) if ok else why)
+        elif not want and self.hotkey.registered:
+            self.hotkey.unregister()
+        if not want:
+            self.lbl_hotkey.setText(tr("녹화 중일 때 {0} 로 클립").format(name) if name else "")
 
     def clear_finished(self):
         for r in [r for r in self.rows if not r.active]:

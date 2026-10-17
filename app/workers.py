@@ -126,6 +126,13 @@ class DownloadWorker(QThread):
         if self._recorder is not None:
             self._recorder.stop()
 
+    def live_state(self) -> tuple[str, float, str] | None:
+        """녹화 중이면 (자라는 .ts 경로, 지금까지 녹화된 초, 파일 이름 바탕), 아니면 None. 실시간 클립용."""
+        rec = self._recorder
+        if rec is None or rec.proc is None or rec.proc.poll() is not None:
+            return None
+        return rec.dst_ts, rec.out_time, getattr(self, "live_base", os.path.splitext(rec.dst_ts)[0])
+
     def stop_recording(self):
         """라이브 녹화를 멈추고 그때까지 받은 분량을 저장한다."""
         self._stop = True
@@ -247,6 +254,7 @@ class DownloadWorker(QThread):
         LOG.info("라이브 녹화 시작: %s", media_url[:120])
         ts = base + ".ts"
         rec = lr.LiveRecorder(media_url, ts, referer, cookie, headers=headers)
+        self.live_base = base   # 실시간 클립은 base + '_clips' 폴더에
         self._recorder = rec
         rec.start()
         self.liveStarted.emit()
