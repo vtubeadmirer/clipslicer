@@ -1840,7 +1840,7 @@ class MainWindow(QMainWindow):
         """목록에 받기 하나를 추가. 같은 주소가 이미 진행 중이면 알리고 False."""
         w = self.show_downloads()
         if w.add(params) is None:
-            self.notifier.notify(tr("녹화 · 다운로드"), tr("이미 받는 중인 주소입니다: {0}").format(params.get("title") or params["url"][:80]))
+            self.notifier.notify(tr("녹화 · 다운로드"), tr("이미 녹화 · 다운로드 중인 방송입니다: {0}").format(params.get("title") or params["url"][:80]))
             return False
         return True
 

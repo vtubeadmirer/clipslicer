@@ -21,6 +21,15 @@ def test_task_key_ignores_tokens():
     assert task_key("https://cdn.x/live/a.m3u8") != task_key("https://cdn.x/live/b.m3u8")
 
 
+def test_task_key_same_path_different_broadcast():
+    """rplay: 모든 방송이 같은 track.m3u8 경로 + 토큰 → 페이지(방송) 가 다르면 다른 작업이어야 한다 (0.9.9 버그)."""
+    url = "https://api2.rplay.live/live/stream/video/track.m3u8?token="
+    a = task_key(url + "AAA", "https://rplay.live/live/111")
+    b = task_key(url + "BBB", "https://rplay.live/live/222")
+    a2 = task_key(url + "CCC", "https://rplay.live/live/111?ref=x")
+    assert a != b and a == a2
+
+
 class _H(http.server.SimpleHTTPRequestHandler):
     root = ""
 
@@ -72,14 +81,14 @@ ready, counts, res = [], [], {}
 w.fileReady.connect(lambda p, page: ready.append([p, page]))
 w.countChanged.connect(counts.append)
 
-def params(path, title):
+def params(path, title, page=None):
     return {"url": base + path, "out_dir": out, "quality": "best", "section": None, "cookies": "", "referer": "",
-            "headers": {"User-Agent": "test"}, "title": title, "page": "https://site/" + title, "cookie_file": ""}
+            "headers": {"User-Agent": "test"}, "title": title, "page": page or ("https://site/" + title), "cookie_file": ""}
 
 r1 = w.add(params("/live1/index.m3u8?t=1", "방송1"))
 r2 = w.add(params("/live2/index.m3u8", "방송2"))
 r3 = w.add(params("/vod/index.m3u8", "다시보기"))
-res["dup_rejected"] = w.add(params("/live1/index.m3u8?t=2", "방송1 again")) is None
+res["dup_rejected"] = w.add(params("/live1/index.m3u8?t=2", "방송1 again", page="https://site/방송1")) is None
 
 def wait(cond, sec):
     t0 = time.time()
@@ -96,8 +105,11 @@ wait(lambda: False, 3)
 r1.stop_recording()                       # 하나만 먼저 멈춤 → 나머지는 계속
 res["r2_still_live_after_r1_stop"] = wait(lambda: r1.state == DONE, 30) and r2.state == LIVE
 res["vod_done"] = wait(lambda: r3.state == DONE, 60)
-r4 = w.add(params("/live3/index.m3u8", "방송3"))
-wait(lambda: r4.state == LIVE, 30)
+r4 = w.add(params("/live3/index.m3u8?token=A", "방송3"))
+# rplay 처럼 같은 경로 + 다른 토큰 + 다른 방송 페이지 → 중복이 아니라 동시에 녹화돼야 한다
+r5 = w.add(params("/live3/index.m3u8?token=B", "채널B", page="https://site/channel-b"))
+res["same_path_other_page_added"] = r5 is not None
+wait(lambda: r4.state == LIVE and r5 is not None and r5.state == LIVE, 30)
 wait(lambda: False, 2)
 res["stop_all"] = w.stop_all_and_wait(60)  # 종료할 때와 같은 경로
 res["states"] = [r.state for r in w.rows]
@@ -118,10 +130,11 @@ def test_concurrent_recordings(streams, tmp_path):
     res = json.loads(line[len("RESULT="):])
     assert res["dup_rejected"] and res["both_live"] and res["active_at_peak"] == 3, res
     assert res["r2_still_live_after_r1_stop"] and res["vod_done"] and res["stop_all"], res
-    assert res["states"] == ["done"] * 4 and res["final_count"] == 0, res
-    assert len(res["ready"]) == 4 and {p for _, p in res["ready"]} >= {"https://site/방송1", "https://site/다시보기"}
+    assert res["same_path_other_page_added"], res
+    assert res["states"] == ["done"] * 5 and res["final_count"] == 0, res
+    assert len(res["ready"]) == 5 and {p for _, p in res["ready"]} >= {"https://site/방송1", "https://site/channel-b"}
     names = sorted(os.path.basename(p) for p in res["paths"])
-    assert [n.split(" ")[0] for n in names] == sorted(["방송1", "방송2", "방송3", "다시보기"]), names
+    assert [n.split(" ")[0] for n in names] == sorted(["방송1", "방송2", "방송3", "채널B", "다시보기"]), names
     for p in res["paths"]:
         assert p.endswith(".mp4") and ft.probe(p)["duration"] > 1.0, p
     assert not [f for f in os.listdir(tmp_path) if f.endswith(".ts")]

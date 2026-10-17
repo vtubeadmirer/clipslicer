@@ -21,9 +21,17 @@ RUNNING, LIVE, STOPPING, DONE, FAILED, CANCELLED = "running", "live", "stopping"
 ACTIVE = (RUNNING, LIVE, STOPPING)
 
 
-def task_key(url: str) -> str:
-    """같은 스트림인지 비교할 열쇠: 쿼리(토큰 등)를 뗀 주소."""
+def _strip(url: str) -> str:
     return url.split("#", 1)[0].split("?", 1)[0].rstrip("/").lower()
+
+
+def task_key(url: str, page: str = "") -> str:
+    """같은 방송인지 비교할 열쇠: 방송 페이지 주소 + 스트림 경로 (쿼리의 토큰은 무시).
+
+    rplay 처럼 모든 방송이 같은 경로(.../track.m3u8)를 쓰고 토큰으로만 구분하는 곳이 있어 경로만으로는
+    다른 방송까지 중복으로 막힌다 (0.9.9). 확장이 넘기는 페이지 주소는 방송마다 다르므로 함께 쓴다.
+    """
+    return _strip(page or url) + "|" + _strip(url)
 
 
 class DownloadRow(QFrame):
@@ -85,7 +93,7 @@ class DownloadRow(QFrame):
 
     @property
     def key(self) -> str:
-        return task_key(self.params["url"])
+        return task_key(self.params["url"], self.params.get("page") or "")
 
     def _on_progress(self, frac: float, text: str):
         if self.state == LIVE:
@@ -191,13 +199,14 @@ class DownloadsWindow(QWidget):
         self._update_summary()
 
     # ---- 추가 ----
-    def find_active(self, url: str) -> DownloadRow | None:
-        k = task_key(url)
+    def find_active(self, url: str, page: str = "") -> DownloadRow | None:
+        k = task_key(url, page)
         return next((r for r in self.rows if r.active and r.key == k), None)
 
     def add(self, params: dict) -> DownloadRow | None:
-        """새 받기를 시작. 같은 주소가 이미 진행 중이면 None (중복 녹화 방지)."""
-        if self.find_active(params["url"]):
+        """새 받기를 시작. 같은 방송(페이지 + 스트림 경로)이 이미 진행 중이면 None (중복 녹화 방지)."""
+        if self.find_active(params["url"], params.get("page") or ""):
+            LOG.info("받기 중복이라 건너뜀 (같은 방송이 이미 진행 중): %s | %s", (params.get("page") or "")[:100], params["url"][:100])
             return None
         os.makedirs(params["out_dir"], exist_ok=True)
         row = DownloadRow(params, self.worker_factory, self)

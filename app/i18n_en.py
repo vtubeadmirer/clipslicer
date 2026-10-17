@@ -746,7 +746,7 @@ EN = {
     '녹화 · 다운로드가 {0}개 진행 중입니다.\n라이브 녹화는 지금까지 받은 분량을 저장하고, 다운로드는 취소한 뒤 종료할까요?': '{0} recording(s)/download(s) are running.\nSave live recordings so far, cancel downloads and quit?',
     '녹화를 저장하는 중…': 'Saving recordings…',
     '녹화 · 다운로드가 진행 중입니다. 끝나거나 멈춘 뒤 다시 업데이트해 주세요.': 'Recordings or downloads are running. Update again after they finish or are stopped.',
-    '이미 받는 중인 주소입니다: {0}': 'Already downloading: {0}',
+    '이미 녹화 · 다운로드 중인 방송입니다: {0}': 'This stream is already being recorded/downloaded: {0}',
     '녹화 · 다운로드 목록… ({0}개 진행 중)': 'Recordings & downloads… ({0} running)',
     '녹화 · 다운로드 완료': 'Recording/download finished',
     '확장 연결': 'Extension link',
