@@ -286,18 +286,15 @@ class CropDialog(QDialog):
 
 
 class DownloadDialog(QDialog):
-    """URL 에서 영상 받기 (yt-dlp). 받은 파일 경로는 .result_path."""
+    """URL 에서 영상 받기 (yt-dlp) 입력 양식. 받기를 누르면 .params 에 담고 닫힌다 → 녹화·다운로드 목록에서 받는다."""
     siteRequested = Signal(str)  # 페이지 주소를 내장 브라우저로 열어 달라는 요청
 
-    def __init__(self, parent, worker_factory, default_dir: str, last_quality: str = "best",
+    def __init__(self, parent, default_dir: str, last_quality: str = "best",
                  last_cookies: str = "", last_referer: str = ""):
         super().__init__(parent)
         self.setWindowTitle(tr("URL 에서 영상 열기"))
-        self.resize(620, 320)
-        self.worker_factory = worker_factory
-        self.worker = None
-        self.result_path = None
-        self.browser_request: dict | None = None   # 브라우저 확장에서 받은 요청 (use_browser_request)
+        self.resize(620, 280)
+        self.params: dict | None = None
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel(tr("유튜브 · 치지직 · 트위치 VOD · 아프리카 등 yt-dlp 가 지원하는 주소를 붙여넣으세요.")))
         tip = QLabel(tr("rplay 처럼 페이지 주소를 지원하지 않는 곳은 방송의 m3u8 주소를 넣으면 됩니다. 라이브면 녹화합니다."))
@@ -368,13 +365,10 @@ class DownloadDialog(QDialog):
         self.ed_ref.setToolTip(tr("일부 사이트는 자기 페이지에서 온 요청만 받습니다. 비워 두면 주소를 보고 자동으로 채웁니다."))
         crow.addWidget(self.ed_ref, 1)
         lay.addLayout(crow)
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 1000)
-        self.progress.setFormat(tr("대기 중"))
-        lay.addWidget(self.progress)
-        self.lbl_status = QLabel("")
-        self.lbl_status.setWordWrap(True)
-        lay.addWidget(self.lbl_status)
+        note = QLabel(tr("받기를 누르면 '녹화 · 다운로드' 창에서 진행됩니다. 여러 개를 동시에 받을 수 있습니다."))
+        note.setStyleSheet("color:#9aa0a6; font-size:11px;")
+        note.setWordWrap(True)
+        lay.addWidget(note)
         btns = QHBoxLayout()
         self.b_site = QPushButton(tr("🌐 브라우저로 열어 녹화"))
         self.b_site.setToolTip(tr("로그인이 필요하거나 페이지 주소를 지원하지 않는 방송(rplay 등)은 내장 브라우저로 열어 녹화합니다"))
@@ -385,31 +379,10 @@ class DownloadDialog(QDialog):
         self.b_start.setDefault(True)
         self.b_start.clicked.connect(self._start)
         self.b_cancel = QPushButton(tr("취소"))
-        self.b_cancel.clicked.connect(self._cancel)
+        self.b_cancel.clicked.connect(self.reject)
         btns.addWidget(self.b_start)
         btns.addWidget(self.b_cancel)
         lay.addLayout(btns)
-
-    def use_browser_request(self, req: dict, cookie_file: str = ""):
-        """브라우저 확장 'ClipSlicer 연결' 이 보낸 요청으로 채운다: 주소 고정, 그 브라우저의 헤더/쿠키를 그대로 쓴다."""
-        self.browser_request = req
-        self.setWindowTitle(tr("브라우저에서 받기"))
-        self.ed_url.setText(req["url"])
-        self.ed_url.setReadOnly(True)
-        if cookie_file:
-            self.cookie_file = cookie_file
-            self.cb_cookies.setItemText(self.cb_cookies.count() - 1, tr("브라우저 로그인 쿠키"))
-            self.cb_cookies.setCurrentIndex(self.cb_cookies.count() - 1)
-        self.cb_cookies.setEnabled(False)
-        self.ed_ref.setEnabled(False)
-        self.b_site.setVisible(False)
-        if req["kind"] == "stream":
-            self.cb_section.setEnabled(False)
-            what = tr("브라우저에서 재생 중인 스트림을 그 브라우저의 로그인·요청 정보 그대로 받습니다. 라이브면 녹화합니다.")
-        else:
-            what = tr("이 페이지를 브라우저의 로그인 쿠키와 함께 받습니다.")
-        title = req.get("title") or ""
-        self.lbl_status.setText((title + "\n" if title else "") + what)
 
     def _on_cookie_choice(self, _i: int):
         if self.cb_cookies.currentData() == "file":
@@ -445,7 +418,7 @@ class DownloadDialog(QDialog):
     def _start(self):
         url = self.ed_url.text().strip()
         from .live_record import unsupported_page
-        if url and not self.browser_request and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
+        if url and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
             self.siteRequested.emit(url)
             return
         if not url.lower().startswith(("http://", "https://")):
@@ -461,74 +434,12 @@ class DownloadDialog(QDialog):
                 QMessageBox.warning(self, tr("구간"), tr("시작과 끝 시각을 1:02:00 같은 형식으로 넣어 주세요 (끝이 시작보다 커야 함)."))
                 return
             section = (a, b)
-        os.makedirs(self.out_dir, exist_ok=True)
-        self.b_start.setEnabled(False)
-        self.ed_url.setEnabled(False)
         from .live_record import guess_referer
         referer = self.referer or guess_referer(url)
-        if referer and not self.referer:
-            self.ed_ref.setText(referer)
-        extra = {}
-        if self.browser_request:
-            extra = {"headers": self.browser_request["headers"] if self.browser_request["kind"] == "stream" else {},
-                     "title": self.browser_request.get("title") or ""}
-            referer = ""
-        self.worker = self.worker_factory(url, self.out_dir, self.quality, section, self.cookies, referer, **extra)
-        self.worker.progress.connect(self._on_progress)
-        self.worker.done.connect(self._on_done)
-        if hasattr(self.worker, "liveStarted"):
-            self.worker.liveStarted.connect(self._on_live)
-        self.worker.start()
-
-    def _on_live(self):
-        self.progress.setRange(0, 0)  # 길이를 모르므로 움직이는 막대
-        self.b_start.setText(tr("● 녹화 중지 (저장)"))
-        self.b_start.setEnabled(True)
-        try:
-            self.b_start.clicked.disconnect()
-        except (RuntimeError, TypeError):
-            pass
-        self.b_start.clicked.connect(self._stop_live)
-        self.b_cancel.setText(tr("취소 (버리기)"))
-
-    def _stop_live(self):
-        if self.worker:
-            self.worker.stop_recording()
-        self.b_start.setEnabled(False)
-        self.lbl_status.setText(tr("녹화를 멈추고 저장하는 중…"))
-
-    def _on_progress(self, frac: float, text: str):
-        if self.progress.maximum() == 0:  # 라이브 녹화 중
-            self.lbl_status.setText(text)
-            return
-        self.progress.setValue(int(frac * 1000))
-        self.progress.setFormat(f"%p%  {text}")
-
-    def _on_done(self, path: str, error: str):
-        if path:
-            self.result_path = path
-            self.accept()
-        else:
-            self.progress.setRange(0, 1000)
-            if self.browser_request and self.browser_request["kind"] == "page" and "Unsupported URL" in error:
-                error = tr("이 사이트는 페이지 주소로는 받을 수 없습니다. 브라우저에서 영상을 재생한 뒤 확장 목록에 뜬 스트림을 고르세요.")
-            self.lbl_status.setText(tr("실패: ") + error)
-            self.b_start.setText(tr("받기"))
-            try:
-                self.b_start.clicked.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self.b_start.clicked.connect(self._start)
-            self.b_start.setEnabled(True)
-            self.ed_url.setEnabled(True)
-            self.progress.setFormat(tr("실패"))
-
-    def _cancel(self):
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.lbl_status.setText(tr("취소 중…"))
-            self.worker.wait(3000)
-        self.reject()
+        self.params = {"url": url, "out_dir": self.out_dir, "quality": self.quality, "section": section,
+                       "cookies": self.cookies, "referer": referer, "headers": {}, "title": "", "page": url,
+                       "cookie_file": ""}
+        self.accept()
 
 
 class LoudDialog(QDialog):

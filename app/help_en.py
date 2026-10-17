@@ -276,6 +276,13 @@ For sites with address support such as YouTube or Chzzk, <b>이 페이지 주소
 <div class="tip">Data only travels inside this PC (127.0.0.1) and ClipSlicer only accepts requests from this extension. ClipSlicer must be running.
 DRM-protected videos can't be downloaded. Use it to archive your own streams or streams you have permission to keep.</div>
 
+<h2>Recordings &amp; downloads (record several at once)</h2>
+<p><b>File ▸ Recordings &amp; downloads…</b> (<kbd>Ctrl+J</kbd>). Streams sent from the browser extension and videos from <b>Open from URL</b> each get a row here
+and <b>run at the same time</b>. Stop each live recording with its own <b>■ Stop recording (save)</b>; when done, use <b>Open in editor</b> or <b>Folder</b>.
+If you are editing a video, finished files are only added to the file list so your editor view is not taken over. Sending the same stream twice is blocked.</p>
+<div class="tip">If recordings are running when you close ClipSlicer, it asks whether to save what was recorded so far. Updates are not applied while recording.
+Several downloads at once need that much more bandwidth and disk space (one 1080p stream is roughly 3–4 GB per hour).</div>
+
 <h2>Stream bookmark mode</h2>
 <p><b>File ▸ Stream bookmark mode…</b>. A small always-on-top window appears. While streaming or recording, press the <b>global hotkey</b> (default <kbd>Ctrl+Alt+B</kbd>)
 whenever a moment is worth clipping and the time is recorded. It works even when OBS or a game is in front. Choose between <kbd>Ctrl+Alt+B</kbd> / <kbd>Ctrl+Alt+M</kbd> / <kbd>Ctrl+Shift+B</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd>;

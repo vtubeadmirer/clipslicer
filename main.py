@@ -46,6 +46,10 @@ def app_icon() -> QIcon:
 
 
 def main():
+    if "--selftest" in sys.argv:   # ClipSlicer.exe --selftest <결과.json> : 창 없이 핵심 기능 점검 (릴리즈 전 CI)
+        i = sys.argv.index("--selftest")
+        from app import selftest
+        return selftest.run(sys.argv[i + 1] if i + 1 < len(sys.argv) else os.path.join(base_dir(), "selftest.json"))
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)  # 내장 브라우저(QtWebEngine)가 나중에 뜰 수 있게
     app = QApplication(sys.argv)

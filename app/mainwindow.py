@@ -31,7 +31,7 @@ from .help import HelpDialog
 from .player import MpvWidget
 from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN, fmt_time_file, loud_peaks
 from .timeline import TimelineWidget, seg_color
-from .workers import AnalyzeWorker, ExportWorker, ExportJob, ExportPart, SilenceWorker, GpuDetectWorker, SceneWorker, DownloadWorker
+from .workers import AnalyzeWorker, ExportWorker, ExportJob, ExportPart, SilenceWorker, GpuDetectWorker, SceneWorker
 from . import bookmarks
 from .bookmarks import BookmarkWindow
 from .notify import Notifier
@@ -41,6 +41,7 @@ from .chat import ChatDialog, ChatData, DEFAULT_KEYWORDS
 from .upload_history import HistoryDialog
 from . import discord
 from .bridge import Bridge
+from .downloads import DownloadsWindow
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".ts", ".m4v", ".wmv", ".flv", ".mpg", ".mpeg", ".m2ts", ".mts"}
 COL_USE, COL_NO, COL_ORDER, COL_START, COL_END, COL_DUR, COL_NAME, COL_NOTE = range(8)
@@ -142,7 +143,7 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_shortcuts()
         self.notifier = Notifier(self, QApplication.windowIcon())
-        self._dl_dialog = None
+        self.downloads_window = None   # 녹화 · 다운로드 목록 (처음 쓸 때 만든다)
         self.bridge = Bridge(self)   # 브라우저 확장 'ClipSlicer 연결' 수신 (127.0.0.1 전용)
         self.bridge.received.connect(self._on_browser_request)
         self.bridge.start()
@@ -540,6 +541,12 @@ class MainWindow(QMainWindow):
         a.setToolTip(tr("rplay 처럼 로그인이 필요한 방송 페이지를 열고, 재생되면 버튼 한 번으로 녹화합니다"))
         a.triggered.connect(lambda: self.open_site_recorder())
         m_file.addAction(a)
+        a = QAction(tr("녹화 · 다운로드 목록…"), self)
+        a.setShortcut("Ctrl+J")
+        a.setToolTip(tr("진행 중인 녹화 · 다운로드를 보고 따로 멈춥니다 (여러 개 동시에)"))
+        a.triggered.connect(self.show_downloads)
+        m_file.addAction(a)
+        self.act_downloads = a
         a = QAction(tr("브라우저 확장 연결… (크롬·엣지·웨일)"), self)
         a.setToolTip(tr("평소 쓰는 브라우저에서 재생 중인 방송·영상을 로그인 그대로 ClipSlicer 로 보냅니다"))
         a.triggered.connect(self.show_extension_help)
@@ -723,6 +730,10 @@ class MainWindow(QMainWindow):
         m_help.addAction(a)
         a = QAction(tr("로그 폴더 열기"), self)
         a.triggered.connect(lambda: os.startfile(log_dir()))
+        m_help.addAction(a)
+        a = QAction(tr("문제 보고용 정보 복사"), self)
+        a.setToolTip(tr("버전 · 윈도우 · 최근 로그를 복사합니다 (토큰 · 쿠키 값은 가림). 문의할 때 붙여 넣으세요"))
+        a.triggered.connect(self.copy_problem_report)
         m_help.addAction(a)
         m_help.addSeparator()
         a = QAction(tr("업데이트 확인…"), self)
@@ -917,6 +928,18 @@ class MainWindow(QMainWindow):
         self.lbl_zoom.setText("" if z <= 1.01 else tr("확대 {0:.1f}x").format(z))
 
     def closeEvent(self, e):
+        n = self.downloads_active()
+        if n:
+            if QMessageBox.question(self, tr("종료"), tr("녹화 · 다운로드가 {0}개 진행 중입니다.\n"
+                                                      "라이브 녹화는 지금까지 받은 분량을 저장하고, 다운로드는 취소한 뒤 종료할까요?").format(n)) != QMessageBox.Yes:
+                e.ignore()
+                return
+            self.statusBar().showMessage(tr("녹화를 저장하는 중…"))
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                self.downloads_window.stop_all_and_wait(60)
+            finally:
+                QApplication.restoreOverrideCursor()
         if self.export_worker and self.export_worker.isRunning():
             if QMessageBox.question(self, tr("종료"), tr("내보내기가 진행 중입니다. 취소하고 종료할까요?")) != QMessageBox.Yes:
                 e.ignore()
@@ -1649,6 +1672,9 @@ class MainWindow(QMainWindow):
             self._apply_update(d.new_dir)
 
     def _apply_update(self, new_dir: str):
+        if self.downloads_active():
+            QMessageBox.warning(self, tr("업데이트"), tr("녹화 · 다운로드가 진행 중입니다. 끝나거나 멈춘 뒤 다시 업데이트해 주세요."))
+            return
         try:
             others = updater.other_instances()
         except Exception:  # 확인을 못 해도 업데이트는 막지 않는다 (교체 스크립트가 다시 기다려 준다)
@@ -1781,59 +1807,108 @@ class MainWindow(QMainWindow):
             proj.dirty = True
             self._schedule_save()
 
-    def open_url(self, *_args, browser_req: dict | None = None):
-        """URL 에서 받기. browser_req 는 브라우저 확장이 보낸 요청 (주소 · 헤더 · 쿠키) → 바로 시작."""
+    def open_url(self, *_args):
+        """URL 에서 받기: 주소 · 화질 · 쿠키를 입력받아 녹화 · 다운로드 목록에 넘긴다 (여러 개 동시에)."""
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
-        d = DownloadDialog(self, lambda u, o, q, sec=None, ck="", ref="", **kw: DownloadWorker(u, o, q, sec, self, ck, ref, **kw),
-                           default_dir, self.settings.value("dl_quality", "best"),
+        d = DownloadDialog(self, default_dir, self.settings.value("dl_quality", "best"),
                            self.settings.value("dl_cookies", "") or "", self.settings.value("dl_referer", "") or "")
         d.siteRequested.connect(lambda u: (d.reject(), QTimer.singleShot(0, lambda: self.open_site_recorder(u))))
-        cookie_file = ""
-        if browser_req:
-            if browser_req["cookies"]:
-                import tempfile
-                from .live_record import write_cookies_txt
-                fd, cookie_file = tempfile.mkstemp(prefix="clipslicer_ext_", suffix=".txt")
-                os.close(fd)
-                write_cookies_txt(browser_req["cookies"], cookie_file)
-            d.use_browser_request(browser_req, cookie_file)
-            QTimer.singleShot(0, d._start)
-        self._dl_dialog = d
-        try:
-            accepted = d.exec()
-        finally:
-            self._dl_dialog = None
-            if cookie_file:
-                try:
-                    os.remove(cookie_file)   # 로그인 쿠키가 든 임시 파일은 바로 지운다
-                except OSError:
-                    pass
-        if not browser_req:
-            self.settings.setValue("dl_cookies", d.cookies)
-            self.settings.setValue("dl_referer", d.referer)
-        if accepted and d.result_path:
+        accepted = d.exec()
+        self.settings.setValue("dl_cookies", d.cookies)
+        self.settings.setValue("dl_referer", d.referer)
+        if accepted and d.params:
             self.settings.setValue("dl_dir", d.out_dir)
             self.settings.setValue("dl_quality", d.quality)
-            self.add_files([d.result_path])
-            self.notifier.notify(tr("다운로드 완료"), os.path.basename(d.result_path))
-            proj = self.projects.get(os.path.abspath(d.result_path))
-            if proj and not proj.source_url:
-                # DownloadDialog 의 URL 입력칸 (dialogs.py). 브라우저에서 온 스트림은 원래 페이지 주소를 남긴다
-                proj.source_url = (browser_req or {}).get("page") or d.ed_url.text().strip()
-                proj.dirty = True
-                self._schedule_save()
+            self.start_download(d.params)
+
+    # ---- 녹화 · 다운로드 목록 ----
+    def show_downloads(self) -> DownloadsWindow:
+        w = self.downloads_window
+        if w is None:
+            w = DownloadsWindow(self)
+            w.fileReady.connect(self._on_download_file)
+            w.openRequested.connect(self._open_downloaded)
+            w.countChanged.connect(self._on_download_count)
+            self.downloads_window = w
+        w.show()
+        w.raise_()
+        w.activateWindow()
+        return w
+
+    def start_download(self, params: dict) -> bool:
+        """목록에 받기 하나를 추가. 같은 주소가 이미 진행 중이면 알리고 False."""
+        w = self.show_downloads()
+        if w.add(params) is None:
+            self.notifier.notify(tr("녹화 · 다운로드"), tr("이미 받는 중인 주소입니다: {0}").format(params.get("title") or params["url"][:80]))
+            return False
+        return True
+
+    def downloads_active(self) -> int:
+        return self.downloads_window.active_count() if self.downloads_window else 0
+
+    def _on_download_count(self, n: int):
+        self.act_downloads.setText(tr("녹화 · 다운로드 목록… ({0}개 진행 중)").format(n) if n else tr("녹화 · 다운로드 목록…"))
+
+    def _on_download_file(self, path: str, page: str):
+        """받기가 끝남: 편집 중인 영상이 없으면 바로 열고, 있으면 파일 목록에만 추가 (편집 화면을 빼앗지 않음)."""
+        if self.current is None:
+            self.add_files([path])
+        else:
+            self._add_file(path)
+        self.notifier.notify(tr("녹화 · 다운로드 완료"), os.path.basename(path))
+        self._remember_source(path, page)
+
+    def _open_downloaded(self, path: str, page: str):
+        self.add_files([path])
+        self._remember_source(path, page)
+        self.raise_()
+        self.activateWindow()
+
+    def _remember_source(self, path: str, page: str):
+        proj = self.projects.get(os.path.abspath(path))
+        if proj and not proj.source_url and page:
+            proj.source_url = page
+            proj.dirty = True
+            self._schedule_save()
 
     # ---- 브라우저 확장 연결 ----
     def _on_browser_request(self, req: dict):
+        """확장이 보낸 스트림/페이지 → 목록에 바로 추가해 받기 시작 (동시에 여러 개)."""
         if self.isMinimized():
             self.showNormal()
-        self.raise_()
-        self.activateWindow()
-        if self._dl_dialog is not None:
-            self.notifier.notify(tr("ClipSlicer"), tr("받기 창이 이미 열려 있습니다. 지금 작업이 끝난 뒤 다시 보내 주세요."))
-            return
-        QTimer.singleShot(0, lambda: self.open_url(browser_req=req))
+        out_dir = self.settings.value("dl_dir", "") or os.path.join(
+            os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
+        cookie_file = ""
+        if req["kind"] == "page" and req["cookies"]:
+            import tempfile
+            from .live_record import write_cookies_txt
+            fd, cookie_file = tempfile.mkstemp(prefix="clipslicer_ext_", suffix=".txt")
+            os.close(fd)
+            write_cookies_txt(req["cookies"], cookie_file)
+        params = {"url": req["url"], "out_dir": out_dir, "quality": self.settings.value("dl_quality", "best"),
+                  "section": None, "cookies": cookie_file, "referer": "",
+                  "headers": req["headers"] if req["kind"] == "stream" else {},
+                  "title": req.get("title") or "", "page": req.get("page") or req["url"], "cookie_file": cookie_file}
+        if not self.start_download(params) and cookie_file:
+            try:
+                os.remove(cookie_file)
+            except OSError:
+                pass
+
+    def copy_problem_report(self):
+        from .logging_setup import log_file
+        from .report import build_report
+        extra = {
+            tr("확장 연결"): (tr("대기 중 (포트 {0})").format(self.bridge.port) if self.bridge.running else tr("꺼짐")),
+            tr("진행 중인 받기"): self.downloads_active(),
+            tr("GPU 인코더"): self.gpu_encoder or "-",
+            tr("열린 파일 수"): len(self.projects),
+        }
+        QApplication.clipboard().setText(build_report(log_file(), extra))
+        QMessageBox.information(self, tr("문제 보고용 정보 복사"),
+                                tr("버전 · 윈도우 정보와 최근 로그를 클립보드에 복사했습니다.\n"
+                                   "토큰 · 쿠키 · 인증 값은 가렸습니다. 문의할 때 그대로 붙여 넣으세요."))
 
     def show_extension_help(self):
         ext_dir = ""

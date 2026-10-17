@@ -32,6 +32,18 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: 태그와 코드 버전 일치 확인
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # 잘못된 커밋에 태그가 걸리면(예: 커밋 실패 후 태그만 생성) 여기서 멈춘다
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $code = (Select-String -Path app\__init__.py -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+          $man = (Select-String -Path assets\ClipSlicer.manifest -Pattern 'name="ClipSlicer" version="([0-9.]+)"').Matches[0].Groups[1].Value
+          Write-Host "tag=$tag code=$code manifest=$man"
+          if ($code -ne $tag) { throw "태그($tag)와 app/__init__.py 버전($code)이 다릅니다" }
+          if ($man -ne "$tag.0") { throw "태그($tag)와 manifest 버전($man)이 다릅니다" }
+
       - name: 의존성 설치
         run: |
           python -m pip install --upgrade pip
@@ -59,6 +71,19 @@ jobs:
           python -c "import sys; sys.path.insert(0, 'tools'); import get_ffmpeg, get_libmpv; open('deps.txt', 'w', newline='\n').write(f'ffmpeg={get_ffmpeg.TAG}\nlibmpv={get_libmpv.TAG}\n')"
           Get-Content deps.txt
           Copy-Item deps.txt dist\ClipSlicer\_internal\deps.txt -Force
+
+      - name: 빌드된 exe 자체 점검 (한글 폴더에서)
+        shell: pwsh
+        run: |
+          # 한글 경로에서만 나는 오류(0.9.5~0.9.7 업데이트 오류 같은)를 릴리즈 전에 잡는다. dist 는 건드리지 않고 사본에서 실행.
+          $dir = Join-Path $env:RUNNER_TEMP "테스트 문서"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item dist\ClipSlicer $dir -Recurse
+          $exe = Join-Path $dir "ClipSlicer\ClipSlicer.exe"
+          $out = Join-Path $env:RUNNER_TEMP "selftest.json"
+          $p = Start-Process $exe -ArgumentList @("--selftest", "`"$out`"") -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out -Encoding utf8 } else { Write-Host "결과 파일 없음" }
+          if ($p.ExitCode -ne 0) { throw "자체 점검 실패 (exit $($p.ExitCode))" }
 
       - name: zip 묶기 (전체 + 경량 업데이트)
         shell: pwsh
