@@ -7,7 +7,7 @@ import logging
 import os
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QToolButton, QMenu
 
 from .segments import PROJECT_SUFFIX
 
@@ -24,6 +24,8 @@ QLabel#startRecentTitle { color: #9aa0a6; font-size: 12px; font-weight: bold; pa
 QPushButton#startBtn { padding: 7px 16px; font-size: 13px; }
 QPushButton#recentBtn { text-align: left; padding: 7px 14px; background: #1c1c20; border: 1px solid #38383f; }
 QPushButton#recentBtn:hover { background: #2a2a30; border-color: #42a5f5; }
+QToolButton#recentDel { color: #7d848c; background: transparent; border: none; padding: 2px 6px; font-size: 14px; }
+QToolButton#recentDel:hover { color: #ef9a9a; }
 """
 
 
@@ -47,11 +49,17 @@ def project_summary(video: str) -> str:
 
 
 class StartPanel(QWidget):
-    """빈 상태 안내. 빈 곳 클릭 → openRequested, 버튼 → open/url/sample, 최근 항목 → fileRequested(path)."""
+    """빈 상태 안내. 빈 곳 클릭 → openRequested, 버튼 → open/url/sample, 최근 항목 → fileRequested(path).
+
+    최근 항목마다 × (목록에서 빼기) 와 우클릭 메뉴(목록에서 빼기 · 폴더에서 보기 · 작업 파일 삭제)가 있다.
+    """
     openRequested = Signal()
     urlRequested = Signal()
     sampleRequested = Signal()
     fileRequested = Signal(str)
+    removeRequested = Signal(str)   # 최근 목록에서만 빼기
+    revealRequested = Signal(str)   # 탐색기에서 보기
+    forgetRequested = Signal(str)   # 작업 파일 · 캐시 삭제 (영상은 그대로)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -120,8 +128,9 @@ class StartPanel(QWidget):
     def set_recent(self, paths: list[str]):
         """존재하는 파일만, 최대 5개. 각 버튼은 작업 파일 요약을 같이 보여 준다."""
         for b in self.recent_buttons:
-            self.recent_layout.removeWidget(b)
-            b.deleteLater()
+            row = b.parentWidget()
+            self.recent_layout.removeWidget(row)
+            row.deleteLater()
         self.recent_buttons = []
         seen: set[str] = set()
         for p in paths or []:
@@ -139,11 +148,35 @@ class StartPanel(QWidget):
             b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             b.setMinimumWidth(420)
             b.clicked.connect(lambda _c=False, p=p: self.fileRequested.emit(p))
-            self.recent_layout.addWidget(b)
+            b.setContextMenuPolicy(Qt.CustomContextMenu)
+            b.customContextMenuRequested.connect(lambda pos, b=b, p=p: self._recent_menu(b, pos, p))
+            row = QWidget()
+            hl = QHBoxLayout(row)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(2)
+            hl.addWidget(b, 1)
+            x = QToolButton()
+            x.setObjectName("recentDel")
+            x.setText("✕")
+            x.setToolTip(tr("최근 목록에서 빼기 (파일은 그대로)"))
+            x.setCursor(Qt.PointingHandCursor)
+            x.setFocusPolicy(Qt.NoFocus)
+            x.clicked.connect(lambda _c=False, p=p: self.removeRequested.emit(p))
+            hl.addWidget(x)
+            self.recent_layout.addWidget(row)
             self.recent_buttons.append(b)
             if len(self.recent_buttons) >= MAX_RECENT_BUTTONS:
                 break
         self.recent_box.setVisible(bool(self.recent_buttons))
+
+    def _recent_menu(self, button: QPushButton, pos, path: str):
+        m = QMenu(self)
+        m.addAction(tr("열기"), lambda: self.fileRequested.emit(path))
+        m.addAction(tr("최근 목록에서 빼기"), lambda: self.removeRequested.emit(path))
+        m.addAction(tr("폴더에서 보기"), lambda: self.revealRequested.emit(path))
+        m.addSeparator()
+        m.addAction(tr("작업 파일 · 분석 캐시 삭제 (영상은 그대로)…"), lambda: self.forgetRequested.emit(path))
+        m.exec(button.mapToGlobal(pos))
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:

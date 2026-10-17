@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from .i18n import tr
+import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -11,6 +13,13 @@ from dataclasses import dataclass, field
 
 PROJECT_SUFFIX = ".clipslicer.json"
 DEFAULT_PATTERN = "{name}_{n}"
+
+
+def backup_path(project_file: str) -> str:
+    """작업 파일의 직전 저장본 위치: %LOCALAPPDATA%\\ClipSlicer\\backups\\<경로 해시>_<이름>.bak"""
+    from .paths import data_dir
+    h = hashlib.sha1(os.path.abspath(project_file).encode("utf-8", "replace")).hexdigest()[:12]
+    return os.path.join(data_dir("backups"), f"{h}_{os.path.basename(project_file)}.bak")
 
 
 def fmt_time(t: float, ms: bool = True) -> str:
@@ -347,25 +356,54 @@ class ClipProject:
             "last_position": self.last_position,
         }
 
+    @property
+    def backup_file(self) -> str:
+        """직전 저장본. 영상 폴더를 어지럽히지 않게 %LOCALAPPDATA%\\ClipSlicer\\backups 에 둔다 (0.9.10 까지는 영상 옆 .bak)."""
+        return backup_path(self.project_file)
+
+    def is_pristine(self) -> bool:
+        """열기만 하고 아무것도 안 바꾼 상태 (마커 · 클립 · 이름 · 메모 · 끈 구간 · 순서 · 크롭 없음)."""
+        return (not self.markers and not self.clips and not self.merge_order and abs(self.crop_x - 0.5) < 1e-9
+                and all(s.enabled and not s.name and not s.note for s in self.segments))
+
     def save(self) -> bool:
+        legacy = self.project_file + ".bak"
         if os.path.isfile(self.project_file):
             try:  # 덮어쓰기 전 백업 (실패해도 저장은 계속)
-                shutil.copyfile(self.project_file, self.project_file + ".bak")
+                shutil.copyfile(self.project_file, self.backup_file)
             except OSError:
                 pass
-        try:
-            with open(self.project_file, "w", encoding="utf-8") as f:
+        tmp = self.project_file + ".tmp"
+        try:  # 임시 파일에 다 쓴 뒤 한 번에 바꿔치기 → 저장 중에 꺼져도 작업 파일이 깨지지 않는다
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.to_json(), f, ensure_ascii=False, indent=1)
-            self.dirty = False
-            return True
+            os.replace(tmp, self.project_file)
         except OSError:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
             return False
+        if os.path.isfile(legacy):   # 예전 버전이 영상 옆에 남긴 .bak 은 정리 (백업은 이제 backup_file)
+            try:
+                os.remove(legacy)
+            except OSError:
+                pass
+        self.dirty = False
+        return True
 
     def load(self) -> bool:
-        try:
-            with open(self.project_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, ValueError):
+        data = None
+        for p in (self.project_file, self.backup_file, self.project_file + ".bak"):  # 깨졌으면 직전 저장본으로
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if p != self.project_file:
+                    logging.getLogger("clipslicer").warning("작업 파일이 깨져 백업에서 복구: %s", p)
+                break
+            except (OSError, ValueError):
+                continue
+        if not isinstance(data, dict):
             return False
         self.markers = [float(m) for m in data.get("markers", []) if 0 < float(m) < self.duration]
         self.markers.sort()

@@ -76,8 +76,11 @@ async function render() {
   box.textContent = "";
   const key = "tab" + tab.id;
   const list = (await chrome.storage.session.get(key))[key] || [];
-  // master/playlist 같은 이름을 위로 (보통 화질 선택이 들어 있는 대표 목록)
-  list.sort((a, b) => (/master|playlist|index|manifest/i.test(label(b.url)) - /master|playlist|index|manifest/i.test(label(a.url))) || b.t - a.t);
+  const head = document.createElement("div");
+  head.className = "tabtitle";
+  head.textContent = tab.title || tab.url || "";
+  head.title = tab.url || "";
+  box.appendChild(head);
   if (!list.length) {
     const d = document.createElement("div");
     d.className = "hint";
@@ -85,22 +88,75 @@ async function render() {
     box.appendChild(d);
     return;
   }
-  for (const s of list) {
+  // ClipSlicer 에게 각 목록이 무엇인지 물어본다 (브라우저 헤더 그대로 받아 봄). 꺼져 있으면 주소만 보여 준다.
+  const infos = connected ? await Promise.all(list.map(s => probe(s))) : list.map(() => null);
+  const items = list.map((s, i) => ({ s, info: infos[i] }));
+  // '한 화질' 목록이 몇 p 인지: 같은 탭의 '전체 화질' 목록에 든 경로와 맞춰 본다
+  const pathHeight = {};
+  for (const it of items) for (const v of (it.info && it.info.variant_paths) || []) if (v.height) pathHeight[v.path] = v.height;
+  for (const it of items) {
+    if (it.info && it.info.kind === "media") {
+      try { it.height = pathHeight[new URL(it.s.url).pathname] || 0; } catch { it.height = 0; }
+    }
+  }
+  const usable = it => it.info && !it.info.error && !it.info.drm && !it.info.audio_only;
+  const score = it => !usable(it) ? -1 :
+    (it.info.kind === "master" ? 3 : 1) + (it.info.live ? 2 : 0) + (it.height || 0) / 10000 + it.s.t / 1e16;
+  items.sort((a, b) => score(b) - score(a));
+  const best = items.find(usable);
+
+  for (const it of items) {
+    const { s, info } = it;
     const row = document.createElement("div");
     row.className = "item";
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = label(s.url);
-    name.title = s.url;
-    const age = document.createElement("span");
-    age.className = "age";
-    age.textContent = ago(s.t);
+    const text = document.createElement("div");
+    text.className = "name";
+    const main = document.createElement("div");
+    main.className = "main";
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = label(s.url) + " · " + ago(s.t);
+    sub.title = s.url;
+    if (it === best) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = "추천";
+      main.appendChild(tag);
+    }
+    main.appendChild(document.createTextNode(describeText(info, it.height)));
+    text.append(main, sub);
     const b = document.createElement("button");
     b.textContent = "녹화/받기";
-    b.disabled = !connected;
+    b.disabled = !connected || !!(info && info.drm);
+    if (it !== best) b.className = "secondary";
     b.onclick = () => send({ kind: "stream", url: s.url, headers: s.headers, page: tab.url, title: tab.title }, b);
-    row.append(name, age, b);
+    row.append(text, b);
     box.appendChild(row);
+  }
+}
+
+function describeText(info, height) {
+  if (!info) return "종류 확인 안 됨 (ClipSlicer 를 켜거나 최신으로 업데이트)";
+  if (info.drm) return "DRM 보호 — 받을 수 없음";
+  if (info.error) return "확인 실패 — 토큰이 만료됐을 수 있음";
+  const live = info.live === true ? "실시간" : info.live === false ? "다시보기" : "";
+  if (info.audio_only) return ["소리만", live].filter(Boolean).join(" · ");
+  if (info.kind === "master") {
+    const hs = info.heights;
+    const q = hs.length > 1 ? hs[0] + "p~" + hs[hs.length - 1] + "p" : hs.length ? hs[0] + "p" : "여러 화질";
+    return ["전체 화질 " + q, live].filter(Boolean).join(" · ");
+  }
+  return [(height ? height + "p " : "") + "한 화질", live].filter(Boolean).join(" · ");
+}
+
+async function probe(s) {
+  try {
+    const r = await fetch(SERVER + "/probe", { method: "POST", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ url: s.url, headers: s.headers }) });
+    if (r.status === 404) return null;   // 확인 기능이 없는 예전 ClipSlicer
+    return r.ok ? await r.json() : { error: "HTTP " + r.status };
+  } catch (e) {
+    return null;
   }
 }
 

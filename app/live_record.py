@@ -179,6 +179,61 @@ def best_variant(master_text: str, base_url: str, max_height: int = 0) -> str:
     return best[2]
 
 
+def variants(master_text: str, base_url: str) -> list[dict]:
+    """마스터 재생 목록의 변형들: [{height, bandwidth, url, audio_only}] (높은 화질 순)."""
+    out = []
+    lines = master_text.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith("#EXT-X-STREAM-INF"):
+            continue
+        uri = next((l.strip() for l in lines[i + 1:] if l.strip() and not l.startswith("#")), "")
+        if not uri:
+            continue
+        bw = int((re.search(r"BANDWIDTH=(\d+)", line) or [0, 0])[1] or 0)
+        m = re.search(r"RESOLUTION=\d+x(\d+)", line)
+        codecs = (re.search(r'CODECS="([^"]*)"', line) or [0, ""])[1]
+        out.append({"height": int(m.group(1)) if m else 0, "bandwidth": bw, "url": urllib.parse.urljoin(base_url, uri),
+                    "audio_only": not m and bool(codecs) and not re.search(r"avc|hvc|hev|vp0?9|av01", codecs, re.I)})
+    out.sort(key=lambda v: (v["height"], v["bandwidth"]), reverse=True)
+    return out
+
+
+def describe(url: str, headers: dict, timeout: int = 8) -> dict:
+    """확장 팝업에 보여 줄 재생 목록 정보 (브라우저 헤더 그대로 받아 본다).
+
+    {kind: 'master'|'media', live: bool|None, heights: [1080, 720…], audio_only: bool, drm: str, error: str}
+    master = 여러 화질이 든 대표 목록 (ClipSlicer 가 가장 좋은 화질을 고름), media = 한 화질의 실제 목록.
+    """
+    info = {"kind": "", "live": None, "heights": [], "audio_only": False, "drm": "", "error": ""}
+    try:
+        text = fetch_text(url, headers, timeout)
+        if not text.lstrip().startswith("#EXTM3U"):
+            info["error"] = tr("재생 목록이 아님")
+            return info
+        info["drm"] = drm_reason(text)
+        if is_master(text):
+            vs = variants(text, url)
+            info["kind"] = "master"
+            info["heights"] = sorted({v["height"] for v in vs if v["height"]}, reverse=True)
+            info["audio_only"] = bool(vs) and all(v["audio_only"] for v in vs)
+            # 같은 탭의 '한 화질' 목록이 몇 p 인지 팝업이 맞춰 볼 수 있게 (주소의 경로만, 토큰 제외)
+            info["variant_paths"] = [{"height": v["height"], "path": urllib.parse.urlparse(v["url"]).path} for v in vs]
+            if vs:   # 라이브인지는 변형 하나를 받아 봐야 안다 (토큰이 없으면 마스터의 쿼리를 이어 붙임)
+                v_url = vs[0]["url"]
+                q = urllib.parse.urlparse(url).query
+                if q and "?" not in v_url:
+                    v_url += "?" + q
+                sub = fetch_text(v_url, headers, timeout)
+                info["live"] = is_live(sub)
+                info["drm"] = info["drm"] or drm_reason(sub)
+        else:
+            info["kind"] = "media"
+            info["live"] = is_live(text)
+    except LiveError as ex:
+        info["error"] = str(ex)[:200]
+    return info
+
+
 def is_live(media_text: str) -> bool:
     return "#EXT-X-ENDLIST" not in media_text and "#EXT-X-PLAYLIST-TYPE:VOD" not in media_text
 

@@ -5,6 +5,14 @@ import shutil
 import sys
 
 
+def data_dir(*parts: str) -> str:
+    """%LOCALAPPDATA%\\ClipSlicer\\<parts> (없으면 만든다). 영상 폴더를 어지럽히지 않을 내부 파일(캐시 · 백업) 자리."""
+    root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(root, "ClipSlicer", *parts)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def base_dir() -> str:
     """exe(패키징) 또는 프로젝트 루트 디렉터리."""
     if getattr(sys, "frozen", False):

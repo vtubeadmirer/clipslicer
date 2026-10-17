@@ -28,7 +28,7 @@ and each segment is saved as its own file. Unlike an editor with In/Out points, 
      Repeat to collect clips, and enable <b>Merge into one</b> to make a highlight reel.</li>
 </ul>
 <div class="tip">Markers and segment settings are <b>auto-saved</b> next to the video as <code>video.clipslicer.json</code>.
-Open the same video again and your work comes back. Every save keeps the previous content as <code>.bak</code>.</div>
+Open the same video again and your work comes back. It is only created once you add markers or rename/annotate segments (not for videos you just opened), and the previous save is kept in <code>%LOCALAPPDATA%\\ClipSlicer\\backups</code>, not next to the video.</div>
 
 <h2>Layout</h2>
 <table>
@@ -365,7 +365,7 @@ when the export finishes the cut files are posted to that channel. The message t
  <tr><td>Snap markers to keyframes</td><td>Markers stick to a keyframe within 0.5 s. Makes Fast mode exact.</td></tr>
  <tr><td>Use GPU encoding</td><td>Uses the detected hardware encoder for re-encoding. The menu shows which one was found.</td></tr>
  <tr><td>Auto-save project</td><td>Saves markers and segments to <code>.clipslicer.json</code> next to the video. Off = work is lost when you close.</td></tr>
- <tr><td>Cache analysis results</td><td>Stores thumbnails, waveform and keyframes in <code>.clipslicer.cache</code> so the video opens instantly next time.</td></tr>
+ <tr><td>Cache analysis results</td><td>Stores thumbnails, waveform and keyframes in <code>%LOCALAPPDATA%\\ClipSlicer\\cache</code> (not in the video folder) so the video opens instantly next time. Old entries are pruned above 2 GB.</td></tr>
  <tr><td>Check for updates at startup</td><td>Queries GitHub releases (at most hourly). A green button appears when a new version exists. Nothing else is sent.</td></tr>
  <tr><td>Compatibility mode</td><td>Renders without GPU acceleration. For black video areas. Restart required.</td></tr>
  <tr><td>Connect YouTube account…</td><td>OAuth client registration and sign-in. See the "YouTube upload" tab.</td></tr>
@@ -385,8 +385,8 @@ The <b>Caption</b> and <b>Subtitles</b> fields are per export and not remembered
 <h2>Project file (.clipslicer.json)</h2>
 <p>Saved next to the video as <code>video.mp4.clipslicer.json</code>: markers, enabled segments, custom names, notes, merge order, clip ranges, crop position, source URL and the last playback position.
 Move it together with the video to keep your work. It is plain text.</p>
-<p>Every save keeps the previous content as <code>video.mp4.clipslicer.json.bak</code>; if markers were cleared by mistake, rename the <code>.bak</code> to recover.
-Chat is stored separately as <code>video.mp4.clipslicer.chat.json</code> and the analysis cache as <code>.clipslicer.cache</code>.</p>
+<p>Saves are written to a temporary file and swapped in, so a crash never leaves a broken file; if the project file is damaged it is restored from the previous save in <code>%LOCALAPPDATA%\\ClipSlicer\\backups</code>. Old <code>.bak</code> files next to videos are cleaned up on the next save.
+Chat is stored separately as <code>video.mp4.clipslicer.chat.json</code> and the analysis cache in <code>%LOCALAPPDATA%\\ClipSlicer\\cache</code>. Right-click a recent item on the start screen ▸ <b>Delete project files and analysis cache</b> to clear one video's work (the video is kept).</p>
 
 <h2>Data in the program folder</h2>
 <table>
@@ -398,7 +398,7 @@ Chat is stored separately as <code>video.mp4.clipslicer.chat.json</code> and the
  <tr><td><code>samples\\\\sample.mp4</code></td><td>The practice video made by "Try a sample video" (recreated if deleted).</td></tr>
  <tr><td><code>logs\\\\clipslicer.log</code></td><td>Error log.</td></tr>
 </table>
-<p>If the program folder is not writable, <code>%LOCALAPPDATA%\\\\ClipSlicer</code> is used instead.</p>
+<p>If the program folder is not writable, <code>%LOCALAPPDATA%\\ClipSlicer</code> is used instead.</p>
 
 <h2>Updates</h2>
 <p>When a new version exists a <b>⬆ Update</b> button appears at the bottom right. It shows the release notes and offers <b>Update now / Later / Skip this version</b>.

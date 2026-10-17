@@ -127,6 +127,29 @@ def test_resolve_needs_headers(hls_server):
 
 
 @needs_ffmpeg
+def test_describe_playlists(hls_server):
+    """확장 팝업 표시용: 전체 화질(마스터) / 한 화질, 실시간 / 다시보기, 헤더 없으면 실패."""
+    hdr = lr.request_headers("https://rplay.live/", "sess=ok")
+    m = lr.describe(hls_server["base"] + "/master.m3u8", hdr)
+    assert m["kind"] == "master" and m["heights"] == [180] and m["live"] is False and not m["error"], m
+    assert m["variant_paths"] == [{"height": 180, "path": "/vod/index.m3u8"}]
+    v = lr.describe(hls_server["base"] + "/live/index.m3u8", hdr)
+    assert v["kind"] == "media" and v["live"] is True and not v["drm"], v
+    assert lr.describe(hls_server["base"] + "/vod/index.m3u8", hdr)["live"] is False
+    bad = lr.describe(hls_server["base"] + "/master.m3u8", lr.request_headers())
+    assert bad["error"] and not bad["kind"]
+
+
+def test_variants_audio_only_and_order():
+    text = ("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS=\"mp4a.40.2\"\naudio.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=640x360,CODECS=\"avc1.4d401e,mp4a.40.2\"\n360.m3u8\n"
+            "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,CODECS=\"avc1.640028,mp4a.40.2\"\n1080.m3u8\n")
+    vs = lr.variants(text, "https://cdn/x/master.m3u8")
+    assert [v["height"] for v in vs] == [1080, 360, 0]
+    assert vs[0]["url"] == "https://cdn/x/1080.m3u8" and not vs[0]["audio_only"] and vs[2]["audio_only"]
+
+
+@needs_ffmpeg
 def test_live_recorder_stop_and_remux(hls_server, tmp_path):
     from app import ffmpeg_tools as ft
     ts = str(tmp_path / "rec.ts")

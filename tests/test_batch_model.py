@@ -139,11 +139,13 @@ def test_merge_order_and_source_url_persist_and_undo(tmp_path):
 
 
 # ---- 저장 백업 ----
-def test_save_creates_backup_of_previous_file(tmp_path):
+def test_save_creates_backup_of_previous_file(tmp_path, monkeypatch):
+    """직전 저장본은 영상 옆이 아니라 %LOCALAPPDATA%\\ClipSlicer\\backups 에 (영상 폴더에는 .json 하나만)."""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
     p = make(path=str(tmp_path / "v.mp4"))
     assert p.save()
-    bak = p.project_file + ".bak"
-    assert not os.path.exists(bak)          # 처음 저장: 백업할 것이 없음
+    bak = p.backup_file
+    assert bak.startswith(str(tmp_path / "appdata")) and not os.path.exists(bak)   # 처음 저장: 백업할 것이 없음
     with open(p.project_file, encoding="utf-8") as f:
         first = f.read()
     p.add_marker(10.0)
@@ -152,6 +154,71 @@ def test_save_creates_backup_of_previous_file(tmp_path):
     with open(bak, encoding="utf-8") as f:
         assert f.read() == first
     assert read_json(p)["markers"] == [10.0]
+    assert sorted(os.listdir(tmp_path)) == ["appdata", "v.mp4.clipslicer.json"]   # .bak · .tmp 없음
+
+
+def test_legacy_bak_removed_and_corrupt_file_recovers(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    p = make(path=str(tmp_path / "v.mp4"))
+    p.add_marker(5.0)
+    legacy = p.project_file + ".bak"
+    with open(legacy, "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert p.save() and not os.path.exists(legacy)      # 예전 버전의 영상 옆 .bak 정리
+    p.add_marker(15.0)
+    assert p.save()                                       # 백업 = 마커 [5]
+    with open(p.project_file, "w", encoding="utf-8") as f:
+        f.write("{깨짐")
+    q = make(path=p.path)
+    assert q.load() and q.markers == [5.0]                # 깨진 작업 파일 → 직전 저장본으로 복구
+
+
+def test_is_pristine():
+    p = make()
+    assert p.is_pristine()
+    p.source_url = "https://example.com/v"
+    p.last_position = 12.0
+    assert p.is_pristine()                                # 원본 주소 · 재생 위치만으로는 편집이 아님
+    p.add_marker(10.0)
+    assert not p.is_pristine()
+    q = make()
+    q.segments[0].note = "메모"
+    assert not q.is_pristine()
+    r = make()
+    r.crop_x = 0.3
+    assert not r.is_pristine()
+
+
+def test_cache_goes_to_appdata_and_migrates_legacy(tmp_path, monkeypatch):
+    from app import cache
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x" * 100)
+    legacy = str(video) + cache.SUFFIX
+    import pickle
+    with open(legacy, "wb") as f:
+        pickle.dump({"version": cache.VERSION, "stamp": cache._stamp(str(video)), "thumbs": [1],
+                     "waveform": None, "keyframes": [0.0]}, f)
+    assert cache.load(str(video))["thumbs"] == [1]        # 예전 위치도 읽는다
+    assert cache.save(str(video), [2], None, [0.0])
+    assert not os.path.exists(legacy)                       # 새 위치에 저장하면 영상 옆 캐시는 지운다
+    assert cache.central_path(str(video)).startswith(str(tmp_path / "appdata"))
+    assert cache.load(str(video))["thumbs"] == [2]
+    assert sorted(os.listdir(tmp_path)) == ["appdata", "v.mp4"]
+
+
+def test_cache_prune_oldest_first(tmp_path, monkeypatch):
+    from app import cache
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
+    d = cache.cache_dir()
+    for i in range(5):
+        p = os.path.join(d, f"{i}{cache.SUFFIX}")
+        with open(p, "wb") as f:
+            f.write(b"x" * 1000)
+        os.utime(p, (1000 + i, 1000 + i))
+    assert cache.prune(max_bytes=5000) == 0
+    assert cache.prune(max_bytes=3500, target_bytes=2500) == 3
+    assert sorted(os.listdir(d)) == [f"3{cache.SUFFIX}", f"4{cache.SUFFIX}"]
 
 
 # ---- 큰 소리 찾기 ----

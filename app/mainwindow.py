@@ -29,7 +29,7 @@ from .dialogs import (SilenceDialog, PatternDialog, ask_overwrite, SceneDialog, 
                       UpdateDialog, RenderAssetsDialog, LoudDialog)
 from .help import HelpDialog
 from .player import MpvWidget
-from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN, fmt_time_file, loud_peaks
+from .segments import ClipProject, fmt_time, parse_time, DEFAULT_PATTERN, fmt_time_file, loud_peaks, PROJECT_SUFFIX
 from .timeline import TimelineWidget, seg_color
 from .workers import AnalyzeWorker, ExportWorker, ExportJob, ExportPart, SilenceWorker, GpuDetectWorker, SceneWorker
 from . import bookmarks
@@ -196,6 +196,9 @@ class MainWindow(QMainWindow):
         self.drop_label.urlRequested.connect(self.open_url)
         self.drop_label.sampleRequested.connect(self.open_sample)
         self.drop_label.fileRequested.connect(lambda p: self.add_files([p]))
+        self.drop_label.removeRequested.connect(self._remove_recent)
+        self.drop_label.revealRequested.connect(self._reveal_file)
+        self.drop_label.forgetRequested.connect(self._forget_work_files)
         self.player = MpvWidget(compat=self.settings.value("compat_mode", "0") == "1")
         self.player.positionChanged.connect(self._on_position)
         self.player.durationChanged.connect(self._on_duration)
@@ -676,6 +679,9 @@ class MainWindow(QMainWindow):
         self.act_cache = QAction(tr("분석 결과 캐시 저장 (.clipslicer.cache)"), self, checkable=True, checked=True)
         self.act_cache.setToolTip(tr("썸네일·파형·키프레임을 저장해 두고 다음에 열 때 바로 씁니다"))
         m_set.addAction(self.act_cache)
+        self.act_recent_dl = QAction(tr("녹화 · 다운로드한 파일도 최근 목록에 넣기"), self, checkable=True, checked=False)
+        self.act_recent_dl.setToolTip(tr("끄면 받자마자 자동으로 열린 파일은 '최근 작업' 에 쌓이지 않습니다 (직접 열거나 편집하면 들어감)"))
+        m_set.addAction(self.act_recent_dl)
         self.act_update = QAction(tr("시작할 때 새 버전 확인 (GitHub 조회)"), self, checkable=True, checked=True)
         m_set.addAction(self.act_update)
         self.act_compat = QAction(tr("호환 모드 — 화면이 검게 나올 때 (재시작 필요)"), self, checkable=True)
@@ -816,6 +822,7 @@ class MainWindow(QMainWindow):
         self.act_gpu.setChecked(s.value("use_gpu", "1") == "1")
         self.act_autosave.setChecked(s.value("autosave", "1") == "1")
         self.act_cache.setChecked(s.value("use_cache", "1") == "1")
+        self.act_recent_dl.setChecked(s.value("recent_downloads", "0") == "1")
         self.act_update.setChecked(s.value("check_updates", "1") == "1")
         self.act_keyframes.setChecked(s.value("show_keyframes", "1") == "1")
         self.pattern = s.value("pattern", DEFAULT_PATTERN) or DEFAULT_PATTERN
@@ -845,6 +852,7 @@ class MainWindow(QMainWindow):
         s.setValue("use_gpu", "1" if self.act_gpu.isChecked() else "0")
         s.setValue("autosave", "1" if self.act_autosave.isChecked() else "0")
         s.setValue("use_cache", "1" if self.act_cache.isChecked() else "0")
+        s.setValue("recent_downloads", "1" if self.act_recent_dl.isChecked() else "0")
         s.setValue("check_updates", "1" if self.act_update.isChecked() else "0")
         s.setValue("show_keyframes", "1" if self.act_keyframes.isChecked() else "0")
         s.setValue("pattern", self.pattern)
@@ -864,10 +872,41 @@ class MainWindow(QMainWindow):
         self.settings.setValue("recent", rec[:MAX_RECENT])
         self._rebuild_recent_menu()
 
+    def _remove_recent(self, path: str):
+        """최근 목록에서 하나만 뺀다 (파일은 그대로)."""
+        self.settings.setValue("recent", [p for p in self._recent() if os.path.normcase(p) != os.path.normcase(path)])
+        self._rebuild_recent_menu()
+
+    def _reveal_file(self, path: str):
+        if os.path.exists(path):
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+
+    def _forget_work_files(self, path: str):
+        """영상은 두고 ClipSlicer 가 만든 작업 파일(마커 등) · 백업 · 분석 캐시를 지우고 최근 목록에서도 뺀다."""
+        if path in self.projects:
+            QMessageBox.information(self, tr("작업 파일 삭제"), tr("지금 열려 있는 영상입니다. 파일 목록에서 닫은 뒤 다시 시도하세요."))
+            return
+        if QMessageBox.question(self, tr("작업 파일 삭제"),
+                                tr("{0}\n\n이 영상의 마커 · 구간 이름 · 메모 같은 작업 내용과 분석 캐시를 지웁니다.\n"
+                                   "영상 파일은 지우지 않습니다. 계속할까요?").format(os.path.basename(path))) != QMessageBox.Yes:
+            return
+        from . import cache
+        from .segments import backup_path
+        project = path + PROJECT_SUFFIX
+        for f in (project, project + ".bak", backup_path(project)):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        cache.remove(path)
+        LOG.info("작업 파일 삭제: %s", path)
+        self._remove_recent(path)
+        self.statusBar().showMessage(tr("작업 파일을 지웠습니다: {0}").format(os.path.basename(path)), 5000)
+
     def _rebuild_recent_menu(self):
         self.drop_label.set_recent(self._recent())
         self.menu_recent.clear()
-        rec = self._recent()
+        rec = [p for p in self._recent() if os.path.isfile(p)]   # 지워지거나 옮겨진 파일은 보이지 않게
         if not rec:
             a = QAction(tr("(없음)"), self)
             a.setEnabled(False)
@@ -982,24 +1021,27 @@ class MainWindow(QMainWindow):
             self.settings.setValue("last_dir", os.path.dirname(paths[0]))
             self.add_files(paths)
 
-    def add_files(self, paths: list[str]):
+    def add_files(self, paths: list[str], remember: bool = True):
+        """remember=False 면 '최근 작업' 에 넣지 않는다 (녹화 · 다운로드 직후 자동으로 연 파일)."""
         added = None
         for p in paths:
             if os.path.isdir(p):
                 for name in sorted(os.listdir(p)):
                     if os.path.splitext(name)[1].lower() in VIDEO_EXTS:
-                        added = self._add_file(os.path.join(p, name)) or added
+                        added = self._add_file(os.path.join(p, name), remember) or added
                 continue
             if p.endswith(".clipslicer.json"):
                 p = p[: -len(".clipslicer.json")]
-            added = self._add_file(p) or added
+            added = self._add_file(p, remember) or added
         if added is not None:
             row = list(self.projects.keys()).index(added)
             self.file_list.setCurrentRow(row)
 
-    def _add_file(self, path: str) -> str | None:
+    def _add_file(self, path: str, remember: bool = True) -> str | None:
         path = os.path.abspath(path)
         if path in self.projects:
+            if remember:
+                self._add_recent(path)
             return path
         if not os.path.isfile(path):
             self._log(tr("파일 없음: {0}").format(path))
@@ -1027,7 +1069,8 @@ class MainWindow(QMainWindow):
         item.setData(Qt.UserRole, path)
         self.file_list.addItem(item)
         self._update_file_item(proj)
-        self._add_recent(path)
+        if remember:
+            self._add_recent(path)
         if bookmarks.bookmarks_for_file(path, proj.duration):
             QTimer.singleShot(300, lambda p=path: self._offer_bookmarks(p))
         self._start_analyze(proj)
@@ -1088,7 +1131,7 @@ class MainWindow(QMainWindow):
         item = self.file_list.takeItem(row)
         path = item.data(Qt.UserRole)
         proj = self.projects.pop(path, None)
-        if proj and proj.dirty and self.act_autosave.isChecked():
+        if proj and proj.dirty and self.act_autosave.isChecked() and self._worth_saving(proj):
             proj.save()
         if self.current and self.current.path == path:
             self.current = None
@@ -1156,6 +1199,12 @@ class MainWindow(QMainWindow):
         if self.act_autosave.isChecked():
             self.save_timer.start()
 
+    @staticmethod
+    def _worth_saving(proj: ClipProject) -> bool:
+        """작업 파일을 만들 가치가 있는지: 이미 있거나, 마커 · 클립 · 이름 · 메모 같은 편집이 있을 때만.
+        열어 보기만 한 영상(녹화 · 다운로드 직후 포함) 옆에는 .clipslicer.json 을 만들지 않는다."""
+        return proj.has_project_file() or not proj.is_pristine()
+
     def _save_dirty(self, force: bool = False):
         if not self.act_autosave.isChecked() and not force:
             return
@@ -1163,9 +1212,11 @@ class MainWindow(QMainWindow):
             return
         n = 0
         for proj in self.projects.values():
-            if proj.dirty and (proj.markers or proj.source_url or proj.has_project_file() or any(s.name or not s.enabled for s in proj.segments)):
+            if proj.dirty and self._worth_saving(proj):
                 if proj.save():
                     n += 1
+                    if proj.path not in self._recent():
+                        self._add_recent(proj.path)
         if n:
             self.lbl_saved.setText(tr("자동 저장됨"))
             QTimer.singleShot(2500, lambda: self.lbl_saved.setText(""))
@@ -1799,7 +1850,7 @@ class MainWindow(QMainWindow):
         w.activateWindow()
 
     def _on_site_file(self, path: str, page: str):
-        self.add_files([path])
+        self.add_files([path], self.act_recent_dl.isChecked())
         self.notifier.notify(tr("녹화 저장 완료"), os.path.basename(path))
         proj = self.projects.get(os.path.abspath(path))
         if proj and not proj.source_url:
@@ -1852,10 +1903,11 @@ class MainWindow(QMainWindow):
 
     def _on_download_file(self, path: str, page: str):
         """받기가 끝남: 편집 중인 영상이 없으면 바로 열고, 있으면 파일 목록에만 추가 (편집 화면을 빼앗지 않음)."""
+        remember = self.act_recent_dl.isChecked()
         if self.current is None:
-            self.add_files([path])
+            self.add_files([path], remember)
         else:
-            self._add_file(path)
+            self._add_file(path, remember)
         self.notifier.notify(tr("녹화 · 다운로드 완료"), os.path.basename(path))
         self._remember_source(path, page)
 

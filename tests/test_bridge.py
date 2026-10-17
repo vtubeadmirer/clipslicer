@@ -237,6 +237,22 @@ def _run_e2e(url, out_dir, stop_after=None):
 
 
 @needs_ffmpeg
+def test_probe_endpoint(running_bridge, auth_hls):
+    """팝업의 '무엇인지' 확인: 확장이 잡은 헤더로 받아 보고 종류를 알려 준다. 확장이 아니면 거부."""
+    b, got = running_bridge
+    body = json.dumps({"url": auth_hls + "/live/index.m3u8",
+                       "headers": {"Authorization": "Bearer secret", "Cookie": "sess=ok"}}).encode()
+    code, j, _ = _call(b.port, "/probe", bridge.ALLOWED_ORIGIN, body)
+    assert code == 200 and j["kind"] == "media" and j["live"] is True and not j["error"], j
+    body = json.dumps({"url": auth_hls + "/vod/index.m3u8", "headers": {}}).encode()
+    code, j, _ = _call(b.port, "/probe", bridge.ALLOWED_ORIGIN, body)
+    assert code == 200 and j["error"] and not j["kind"]          # 헤더 없음 → 거부당함을 알려 줌
+    assert _call(b.port, "/probe", "https://evil.example", body)[0] == 403
+    _pump()
+    assert not got                                                   # 확인은 받기를 시작하지 않는다
+
+
+@needs_ffmpeg
 def test_auth_server_rejects_without_headers(auth_hls):
     with pytest.raises(lr.LiveError):
         lr.resolve(auth_hls + "/vod/index.m3u8", lr.request_headers())

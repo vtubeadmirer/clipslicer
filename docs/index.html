@@ -443,14 +443,14 @@ DRM 이 걸린 영상은 받을 수 없습니다. 본인 방송이나 허락받�
 <p>마커·구간 켜짐·직접 정한 이름·메모·합치기 순서·크롭 위치·원본 URL·마지막 재생 위치가 영상과 같은 폴더에 <code>영상이름.mp4.clipslicer.json</code> 으로 자동 저장됩니다
 (변경 후 0.6초 뒤, 영상 전환 시, 종료 시). 같은 영상을 다시 열면 그대로 복원되고 상태 표시줄에 "저장된 작업 복원"이 표시됩니다.
 이 json 파일을 창에 끌어다 놓아도 해당 영상이 열립니다. 영상을 다른 PC 로 옮길 때 같이 옮기면 작업이 유지됩니다.</p>
-<p>저장할 때마다 직전 내용이 <code>영상이름.mp4.clipslicer.json.bak</code> 으로 남습니다. 실수로 마커를 다 지우고 저장됐다면 <code>.bak</code> 의 이름을 되돌려 복구할 수 있습니다.
-채팅은 <code>영상이름.mp4.clipslicer.chat.json</code>, 분석 캐시는 <code>.clipslicer.cache</code> 에 따로 저장됩니다.</p>
+<p>마커를 찍거나 이름·메모를 바꾼 영상에만 만들어집니다. 직전 저장본은 <code>%LOCALAPPDATA%\ClipSlicer\backups</code> 에 남고, 작업 파일이 깨지면 자동으로 그걸로 복구합니다.
+채팅은 <code>영상이름.mp4.clipslicer.chat.json</code>, 분석 캐시는 <code>%LOCALAPPDATA%\ClipSlicer\cache</code> 에 따로 저장됩니다 (영상 폴더에 만들지 않음).</p>
 <h3>설정 메뉴</h3>
 <table>
  <tr><td>마커를 키프레임에 맞추기</td><td>마커를 가까운(0.5초 이내) 키프레임에 붙임. 기본 꺼짐.</td></tr>
  <tr><td>GPU 인코딩 사용</td><td>감지된 하드웨어 인코더 사용. 기본 켜짐.</td></tr>
  <tr><td>작업 자동 저장</td><td>끄면 .clipslicer.json 을 만들지 않습니다. 기본 켜짐.</td></tr>
- <tr><td>분석 결과 캐시 저장</td><td>썸네일·파형·키프레임을 영상 옆 <code>.clipslicer.cache</code> 에 저장. 다음에 열 때 즉시 표시. 영상이 바뀌면 자동 갱신.</td></tr>
+ <tr><td>분석 결과 캐시 저장</td><td>썸네일·파형·키프레임을 <code>%LOCALAPPDATA%\ClipSlicer\cache</code> 에 저장. 다음에 열 때 즉시 표시. 영상이 바뀌면 자동 갱신, 2 GB 넘으면 오래된 것부터 정리.</td></tr>
  <tr><td>시작할 때 새 버전 확인</td><td>GitHub 릴리스 조회 (1시간에 한 번까지). 기본 켜짐.</td></tr>
  <tr><td>호환 모드</td><td>GPU 가속 없이 재생 화면을 그립니다. 화면이 검게만 나올 때. 재시작 필요.</td></tr>
  <tr><td>언어 / Language</td><td>한국어 / English / 시스템 설정 따라가기. 재시작 필요.</td></tr>
@@ -504,7 +504,7 @@ ffmpeg 나 libmpv 가 바뀐 릴리스는 전체 zip 으로 받습니다. 어느
  <tr><td>북마크 단축키가 등록되지 않는다</td><td>다른 프로그램이 같은 전역 단축키를 씁니다. 북마크 창에서 다른 조합(F9, F10 등)을 고르세요. Windows 에서만 동작합니다.</td></tr>
  <tr><td>채팅을 못 받는다</td><td>치지직은 다시보기 채팅이 공개된 영상, 유튜브는 라이브 다시보기만 됩니다. 주소가 맞는데도 안 되면 잠시 뒤 다시 시도하세요.</td></tr>
  <tr><td>디스코드로 안 보내진다</td><td>설정 ▸ 디스코드 웹훅… 의 "테스트 메시지 보내기"로 URL 을 확인하세요. 서버 한도보다 큰 파일은 건너뜁니다.</td></tr>
- <tr><td>작업 파일이 망가졌다 / 마커가 사라졌다</td><td>영상 옆 <code>영상이름.mp4.clipslicer.json.bak</code> 이 직전 저장본입니다. <code>.bak</code> 을 떼어 이름을 되돌리고 다시 여세요.</td></tr>
+ <tr><td>작업 파일이 망가졌다 / 마커가 사라졌다</td><td>작업 파일이 깨졌으면 열 때 직전 저장본으로 자동 복구합니다. 직전 저장본은 <code>%LOCALAPPDATA%\ClipSlicer\backups</code> 에 있습니다.</td></tr>
 </table>
 
 <h2 id="install">설치 · 빌드</h2>

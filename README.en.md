@@ -42,7 +42,7 @@ Releases that only change the code arrive as a **lite update** of about 20 MB th
 
 | Area | What you get |
 |---|---|
-| Cutting | Split mode (`S`), clip mode (`I`/`O`), frame stepping, undo/redo, segment names (`N`/`F2`) and **notes**, **merge order** ▲▼, auto-saved project files (`.clipslicer.json` + `.bak`) |
+| Cutting | Split mode (`S`), clip mode (`I`/`O`), frame stepping, undo/redo, segment names (`N`/`F2`) and **notes**, **merge order** ▲▼, auto-saved project files (`.clipslicer.json`, only for edited videos) |
 | Timeline | Thumbnail strip, audio waveform, **chat reaction graph**, keyframe marks, `Ctrl+wheel` zoom, hover preview, analysis cache, collapsible right panel (`Ctrl+Shift+R`) |
 | Auto markers | Silence detection, scene-change detection, **loud moments (laughter, cheering)**, paste timestamps (YouTube chapters, comments), **chat reaction peaks and keyword markers** (CHZZK and YouTube live replays) |
 | Stream bookmarks | **Stream bookmark mode**: a global hotkey (`Ctrl+Alt+B` …) records moments while streaming or recording; open the recording and the bookmarks are offered as markers |
@@ -105,7 +105,7 @@ Fast is enough most of the time; use Smart when the shifted start bothers you.
 - **Loud-moment markers** (`Ctrl+Shift+L`): finds laughter, cheering and other spikes in the waveform (default 2 s lead).
 - **Output effects**: loudness normalization, burned-in caption and subtitles, Shorts blur background, watermark, intro/outro (Settings ▸ Watermark / intro & outro…). A caption, subtitles or watermark forces a re-encode.
 - **Publishing**: YouTube upload presets, scheduled publish and upload history; automatic **Discord webhook** posting when an export finishes (Settings ▸ Discord webhook…).
-- **Convenience**: start screen (recent work, sample video), first-run guide, tray notifications, segment notes, merge order, `.bak` project backups, lite updates.
+- **Convenience**: start screen (recent work, sample video), first-run guide, tray notifications, segment notes, merge order, project backups with auto-recovery (outside the video folder), lite updates.
 
 ## About YouTube upload
 
@@ -165,7 +165,7 @@ main.py              entry point
 app/mainwindow.py    main window
 app/player.py        libmpv player widget
 app/timeline.py      timeline widget (thumbnails, waveform, chat graph)
-app/segments.py      marker/segment model, notes and merge order, undo, project files (.bak), loud-peak and bookmark maths
+app/segments.py      marker/segment model, notes and merge order, undo, project files (backup/recovery), loud-peak and bookmark maths
 app/ffmpeg_tools.py  analysis, cutting, merging, caption/subtitle/watermark/intro rendering (ffmpeg)
 app/workers.py       background jobs (analysis, export, download)
 app/bookmarks.py     stream bookmarks (global hotkey, log, import)

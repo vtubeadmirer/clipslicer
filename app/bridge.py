@@ -47,15 +47,15 @@ def clean_headers(headers) -> dict:
     return out
 
 
-def parse_request(body: bytes) -> dict:
-    """POST /send 본문 검사. 반환: {kind, url, headers, cookies, page, title}."""
+def parse_request(body: bytes, require_kind: bool = True) -> dict:
+    """POST /send · /probe 본문 검사. 반환: {kind, url, headers, cookies, page, title}."""
     try:
         data = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as ex:
         raise BridgeError("JSON 이 아닙니다") from ex
     if not isinstance(data, dict):
         raise BridgeError("형식이 잘못되었습니다")
-    kind = data.get("kind")
+    kind = data.get("kind") if require_kind else (data.get("kind") or "stream")
     if kind not in ("stream", "page"):
         raise BridgeError("kind 는 stream 또는 page")
     url = str(data.get("url") or "").strip()
@@ -129,10 +129,11 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed():
             return
-        if self.path.split("?")[0] == "/ping":   # 확장은 POST 로 확인한다 (GET 에는 Origin 이 안 붙음)
+        route = self.path.split("?")[0]
+        if route == "/ping":   # 확장은 POST 로 확인한다 (GET 에는 Origin 이 안 붙음)
             self._ping()
             return
-        if self.path.split("?")[0] != "/send":
+        if route not in ("/send", "/probe"):
             self._reply(404, {"error": "not found"})
             return
         try:
@@ -142,8 +143,18 @@ class _Handler(BaseHTTPRequestHandler):
         if not 0 < n <= MAX_BODY:
             self._reply(413, {"error": "too large"})
             return
+        body = self.rfile.read(n)
+        if route == "/probe":   # 팝업이 목록마다 '무엇인지' 묻는다 (전체 화질/한 화질, 실시간/다시보기, DRM)
+            try:
+                req = parse_request(body, require_kind=False)
+            except BridgeError as ex:
+                self._reply(400, {"error": str(ex)})
+                return
+            from .live_record import browser_headers, describe
+            self._reply(200, describe(req["url"], browser_headers(req["headers"])))
+            return
         try:
-            req = parse_request(self.rfile.read(n))
+            req = parse_request(body)
         except BridgeError as ex:
             self._reply(400, {"error": str(ex)})
             return
