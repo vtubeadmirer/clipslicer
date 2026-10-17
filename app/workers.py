@@ -238,9 +238,15 @@ class DownloadWorker(QThread):
                 req = (info or {}).get("requested_downloads") or []
                 path = req[0].get("filepath") if req else ydl.prepare_filename(info)
             return path or ""
+        return self._record_live(yt_dlp, media_url, base, self.referer, cookie, headers if self.headers else None)
+
+    def _record_live(self, yt_dlp, media_url: str, base: str, referer: str = "", cookie: str = "",
+                     headers: dict | None = None) -> str:
+        """라이브 HLS 를 우리 녹화기로: '녹화 중지 (저장)' · 취소가 바로 듣는다. base + .ts → .mp4"""
+        from . import live_record as lr
         LOG.info("라이브 녹화 시작: %s", media_url[:120])
         ts = base + ".ts"
-        rec = lr.LiveRecorder(media_url, ts, self.referer, cookie, headers=headers if self.headers else None)
+        rec = lr.LiveRecorder(media_url, ts, referer, cookie, headers=headers)
         self._recorder = rec
         rec.start()
         self.liveStarted.emit()
@@ -271,6 +277,36 @@ class DownloadWorker(QThread):
             return mp4
         return ts  # 정리에 실패해도 .ts 는 그대로 열 수 있다
 
+    @staticmethod
+    def _live_hls(ydl, info: dict) -> tuple[str, dict] | None:
+        """라이브이고 골라진 포맷이 HLS 하나면 (재생 목록 주소, 보낼 헤더). 아니면 None (yt-dlp 가 받음)."""
+        if not info or info.get("_type") == "playlist" or not info.get("is_live"):
+            return None
+        fmts = info.get("requested_formats") or [info]
+        if len(fmts) != 1 or not (fmts[0].get("protocol") or "").startswith("m3u8") or not fmts[0].get("url"):
+            return None
+        f = fmts[0]
+        headers = dict(info.get("http_headers") or {})
+        headers.update(f.get("http_headers") or {})
+        try:
+            cookie = ydl.cookiejar.get_cookie_header(f["url"])
+        except Exception:
+            cookie = ""
+        if cookie:
+            headers["Cookie"] = cookie
+        return f["url"], headers
+
+    @staticmethod
+    def _allow_hls_extensions(params: dict, info: dict):
+        """골라진 포맷이 모두 HLS 면 ffmpeg 입력의 조각 확장자 검사를 끈다 (치지직 라이브의 .m4v 조각).
+        HLS 가 아닌 입력에 주면 ffmpeg 가 'Option not found' 로 실패하므로 HLS 일 때만."""
+        from .live_record import HLS_INPUT_ARGS
+        if not info or info.get("_type") == "playlist":
+            return
+        fmts = info.get("requested_formats") or [info]
+        if all((f.get("protocol") or "").startswith("m3u8") for f in fmts):
+            params["external_downloader_args"] = {"ffmpeg_i": list(HLS_INPUT_ARGS)}
+
     # ---- 전체 ----
     def _download_full(self, yt_dlp, hook) -> str:
         result = {"path": ""}
@@ -285,7 +321,18 @@ class DownloadWorker(QThread):
         opts = self._base_opts(hook)
         opts["postprocessor_hooks"] = [pp_hook]
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(self.url, download=True)
+            info = ydl.extract_info(self.url, download=False)   # 먼저 어떤 포맷이 골라지는지 보고
+            live = self._live_hls(ydl, info)
+            if live:
+                # 라이브(치지직 · 유튜브 라이브 등): yt-dlp 는 주소만 찾고 녹화는 우리 녹화기로
+                # (yt-dlp 의 ffmpeg 녹화는 취소가 안 듣고 '녹화 중지 (저장)' 도 없다)
+                from .segments import safe_filename
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                name = self.title or str(info.get("uploader") or info.get("channel") or info.get("title") or "live")
+                base = os.path.join(self.out_dir, safe_filename(f"{name[:80]} {stamp}"))
+                return self._record_live(yt_dlp, live[0], base, headers=live[1])
+            self._allow_hls_extensions(ydl.params, info)
+            info = ydl.process_ie_result(info, download=True)
             path = result["path"]
             if not path:
                 req = (info or {}).get("requested_downloads") or []
@@ -343,6 +390,7 @@ class DownloadWorker(QThread):
         opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [(start, end)])
         opts["force_keyframes_at_cuts"] = False
         opts["outtmpl"] = base + ".%(ext)s"
+        self._allow_hls_extensions(opts, info)   # 구간 받기는 ffmpeg 가 HLS 를 직접 연다
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([self.url])
         if os.path.exists(dst):

@@ -41,6 +41,7 @@ from .chat import ChatDialog, ChatData, DEFAULT_KEYWORDS
 from .upload_history import HistoryDialog
 from . import discord
 from .bridge import Bridge
+from .flowlayout import FlowLayout
 from .downloads import DownloadsWindow
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".ts", ".m4v", ".wmv", ".flv", ".mpg", ".mpeg", ".m2ts", ".mts"}
@@ -319,11 +320,10 @@ class MainWindow(QMainWindow):
         rv = QVBoxLayout(right)
         rv.setContentsMargins(4, 8, 8, 8)
         rv.setSpacing(6)
-        head = QHBoxLayout()
+        head = FlowLayout()   # 좁아지면 버튼이 다음 줄로 (잘리지 않게)
         t2 = QLabel(tr("구간 목록"))
         t2.setObjectName("panelTitle")
         head.addWidget(t2)
-        head.addStretch(1)
         btn_silence = QPushButton(tr("무음 자동 마커"))
         btn_silence.setToolTip(tr("조용한 구간에 마커를 자동으로 찍습니다 (Ctrl+Shift+M)"))
         btn_silence.setFocusPolicy(Qt.NoFocus)
@@ -384,12 +384,16 @@ class MainWindow(QMainWindow):
             tr("빠르게: 재인코딩 없이 복사. 시작점이 바로 앞 키프레임까지(보통 1~2초) 당겨질 수 있음.\n스마트: 시작~첫 키프레임만 재인코딩해서 시작점을 정확히 맞춤. 파일을 한 번 더 읽음.\n정확하게: 전부 재인코딩. 어떤 영상이든 되지만 가장 느림."))
         self._mode_tip = self.cb_mode.toolTip()
         self.cb_mode.setFocusPolicy(Qt.NoFocus)
+        self._shrinkable(self.cb_mode)
         self.cb_mode.currentIndexChanged.connect(lambda _i: self._refresh_table())
         moderow.addWidget(self.cb_mode, 1)
         gv.addLayout(moderow)
 
-        optrow = QHBoxLayout()
-        optrow.addWidget(QLabel(tr("출력")))
+        optrow = FlowLayout()
+        out_box = QWidget()   # '출력' 글자와 콤보는 함께 움직이게
+        out_lay = QHBoxLayout(out_box)
+        out_lay.setContentsMargins(0, 0, 0, 0)
+        out_lay.addWidget(QLabel(tr("출력")))
         self.cb_audio = QComboBox()
         self.cb_audio.addItem(tr("영상 + 오디오"), "")
         self.cb_audio.addItem(tr("영상만 (소리 없음)"), "mute")
@@ -398,7 +402,9 @@ class MainWindow(QMainWindow):
         self.cb_audio.addItem(tr("세로 9:16 쇼츠 (재인코딩)"), "vertical")
         self.cb_audio.setFocusPolicy(Qt.NoFocus)
         self.cb_audio.currentIndexChanged.connect(self._on_output_changed)
-        optrow.addWidget(self.cb_audio)
+        self._shrinkable(self.cb_audio, 8)
+        out_lay.addWidget(self.cb_audio, 1)
+        optrow.addWidget(out_box)
         self.btn_crop = QPushButton(tr("크롭 위치…"))
         self.btn_crop.setToolTip(tr("현재 화면에서 세로로 잘라낼 위치를 고릅니다"))
         self.btn_crop.setFocusPolicy(Qt.NoFocus)
@@ -410,9 +416,8 @@ class MainWindow(QMainWindow):
         self.cb_merge.setFocusPolicy(Qt.NoFocus)
         self.cb_merge.toggled.connect(lambda _c: self._refresh_table())
         optrow.addWidget(self.cb_merge)
-        optrow.addStretch(1)
         gv.addLayout(optrow)
-        optrow = QHBoxLayout()  # 완료 후 동작은 둘째 줄 (패널 폭을 줄이기 위해)
+        optrow = FlowLayout()  # 완료 후 동작 (좁으면 여러 줄)
         self.cb_open = QCheckBox(tr("완료 후 폴더 열기"))
         self.cb_open.setChecked(True)
         self.cb_open.setFocusPolicy(Qt.NoFocus)
@@ -425,10 +430,9 @@ class MainWindow(QMainWindow):
         self.cb_discord.setToolTip(tr("내보내기가 끝나면 잘린 파일들을 디스코드 웹훅으로 보냅니다 (크기 한도 이하만). 설정 ▸ 디스코드 웹훅… 필요"))
         self.cb_discord.setFocusPolicy(Qt.NoFocus)
         optrow.addWidget(self.cb_discord)
-        optrow.addStretch(1)
         gv.addLayout(optrow)
 
-        fxrow = QHBoxLayout()
+        fxrow = FlowLayout()
         self.cb_normalize = QCheckBox(tr("음량 정규화"))
         self.cb_normalize.setToolTip(tr("loudnorm(-14 LUFS)으로 소리 크기를 고르게 맞춥니다. 오디오만 aac 로 다시 인코딩하고 영상은 그대로 복사합니다"))
         self._normalize_tip = self.cb_normalize.toolTip()
@@ -439,9 +443,9 @@ class MainWindow(QMainWindow):
         self.cb_layout.addItem(tr("블러 배경 (전체 화면 + 흐린 배경)"), "blur")
         self.cb_layout.setToolTip(tr("세로 9:16 출력 레이아웃. 블러 배경은 16:9 화면 전체를 가운데 두고 위아래를 흐린 확대 화면으로 채웁니다"))
         self.cb_layout.setFocusPolicy(Qt.NoFocus)
+        self._shrinkable(self.cb_layout, 8)
         self.cb_layout.hide()
         fxrow.addWidget(self.cb_layout)
-        fxrow.addStretch(1)
         gv.addLayout(fxrow)
 
         caprow = QHBoxLayout()
@@ -467,7 +471,7 @@ class MainWindow(QMainWindow):
         subrow.addWidget(btn_sub)
         gv.addLayout(subrow)
 
-        btnrow = QHBoxLayout()
+        btnrow = FlowLayout()
         self.btn_export_cur = QPushButton(tr("현재 영상"))
         self.btn_export_cur.setToolTip(tr("현재 영상의 켜진 구간만 내보내기 (Ctrl+Shift+E)"))
         self.btn_export_cur.clicked.connect(lambda: self.start_export(all_files=False))
@@ -500,6 +504,8 @@ class MainWindow(QMainWindow):
         right_sa.setWidgetResizable(True)
         right_sa.setFrameShape(QFrame.NoFrame)
         right_sa.setMinimumWidth(260)
+        # 가로 스크롤 없이 패널 폭에 맞춘다: 버튼 · 체크박스 줄은 FlowLayout 으로 줄바꿈, 콤보는 글자를 줄임
+        right_sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         root.addWidget(right_sa)
         self.right_panel = right_sa
 
@@ -1198,6 +1204,14 @@ class MainWindow(QMainWindow):
             self._update_file_item(self.current)
         if self.act_autosave.isChecked():
             self.save_timer.start()
+
+    @staticmethod
+    def _shrinkable(combo: QComboBox, chars: int = 10):
+        """긴 항목 글자 때문에 콤보가 패널을 넓히지 않게: 좁으면 글자를 줄여 보여 준다 (펼친 목록은 전체 글자)."""
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(chars)
+        combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        combo.view().setMinimumWidth(combo.view().sizeHintForColumn(0) + 24)
 
     @staticmethod
     def _worth_saving(proj: ClipProject) -> bool:

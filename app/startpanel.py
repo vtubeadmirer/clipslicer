@@ -86,6 +86,8 @@ class StartPanel(QWidget):
         hint.setObjectName("startHint")
         hint.setAlignment(Qt.AlignCenter)
         hint.setTextFormat(Qt.RichText)
+        hint.setWordWrap(True)   # 창을 좁히면 줄바꿈 (한 줄 고정이면 창 최소 폭을 키운다)
+        title.setWordWrap(True)
         lay.addWidget(hint)
         lay.addSpacing(10)
 
@@ -145,8 +147,9 @@ class StartPanel(QWidget):
             b.setToolTip(p)
             b.setCursor(Qt.PointingHandCursor)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            b.setMinimumWidth(420)
+            # 긴 파일 이름이 창 최소 폭을 키우지 않게: 좁으면 글자가 잘려 보이고 전체 경로는 툴팁으로
+            b.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            b.setMinimumWidth(160)
             b.clicked.connect(lambda _c=False, p=p: self.fileRequested.emit(p))
             b.setContextMenuPolicy(Qt.CustomContextMenu)
             b.customContextMenuRequested.connect(lambda pos, b=b, p=p: self._recent_menu(b, pos, p))

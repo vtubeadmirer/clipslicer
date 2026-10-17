@@ -27,6 +27,9 @@ BROWSERS = ("firefox", "edge", "chrome", "whale", "brave", "opera", "vivaldi", "
 
 # 페이지 주소만으로는 받을 수 없는 사이트 → 기본 Referer
 REFERER_HINTS = {"rplay": "https://rplay.live/"}
+# ffmpeg 8 의 HLS 입력은 조각 확장자가 형식과 맞는지 엄격히 본다 → 치지직 라이브(fMP4 조각이 .m4v)가
+# 'Invalid data' 로 열리지 않는다. HLS 입력에만 붙일 것 (다른 입력에 주면 'Option not found' 로 실패).
+HLS_INPUT_ARGS = ["-extension_picky", "0"]
 
 
 class LiveError(Exception):
@@ -297,6 +300,7 @@ class LiveRecorder:
                 cmd += ["-headers", hdr]
             cmd += ["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "10",
                     "-rw_timeout", "30000000"]
+            cmd += HLS_INPUT_ARGS   # 입력은 항상 HLS 재생 목록
         cmd += self.input_args + ["-i", self.url, "-map", "0:v?", "-map", "0:a?", "-c", "copy",
                                   "-f", "mpegts", "-progress", "pipe:1", self.dst_ts]
         return cmd

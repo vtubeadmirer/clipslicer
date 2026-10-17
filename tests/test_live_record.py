@@ -140,6 +140,33 @@ def test_describe_playlists(hls_server):
     assert bad["error"] and not bad["kind"]
 
 
+def test_hls_extension_picky_only_for_hls():
+    """치지직 라이브(.m4v fMP4 조각): ffmpeg 8 은 확장자 검사로 거부 → HLS 입력에만 -extension_picky 0."""
+    cmd = lr.LiveRecorder("https://x/a.m3u8", "o.ts").command()
+    i = cmd.index("-extension_picky")
+    assert cmd[i + 1] == "0" and i < cmd.index("-i")
+    from app.workers import DownloadWorker as W
+    hls = {"is_live": True, "protocol": "m3u8_native", "url": "https://cdn/chunklist.m3u8",
+           "http_headers": {"User-Agent": "UA", "Referer": "https://chzzk.naver.com/"}}
+    p = {}
+    W._allow_hls_extensions(p, hls)
+    assert p == {"external_downloader_args": {"ffmpeg_i": ["-extension_picky", "0"]}}
+    p = {}
+    W._allow_hls_extensions(p, {"requested_formats": [{"protocol": "m3u8_native"}, {"protocol": "https"}]})
+    assert p == {}                                  # HLS 가 아닌 입력이 섞이면 붙이지 않는다 (Option not found)
+
+    class FakeYdl:
+        class cookiejar:
+            @staticmethod
+            def get_cookie_header(url):
+                return "NID=1"
+    url, hdr = W._live_hls(FakeYdl, hls)
+    assert url == "https://cdn/chunklist.m3u8" and hdr["Referer"] == "https://chzzk.naver.com/" and hdr["Cookie"] == "NID=1"
+    assert W._live_hls(FakeYdl, dict(hls, is_live=False)) is None          # 다시보기는 yt-dlp 가 받음
+    assert W._live_hls(FakeYdl, dict(hls, protocol="https")) is None
+    assert W._live_hls(FakeYdl, {"is_live": True, "requested_formats": [hls, hls]}) is None
+
+
 def test_variants_audio_only_and_order():
     text = ("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS=\"mp4a.40.2\"\naudio.m3u8\n"
             "#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=640x360,CODECS=\"avc1.4d401e,mp4a.40.2\"\n360.m3u8\n"
