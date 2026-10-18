@@ -163,6 +163,14 @@ class _AuthHandler(http.server.SimpleHTTPRequestHandler):
         if self.headers.get("Authorization") != "Bearer secret" or "sess=ok" not in (self.headers.get("Cookie") or ""):
             self.send_error(403)
             return
+        if self.path.split("?")[0].endswith("/hlsstream"):   # 확장자 없는 재생 목록 (rplay 다시보기 흉내)
+            body = open(self.translate_path(self.path), "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.apple.mpegurl")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         return super().do_GET()
 
     def log_message(self, *a):
@@ -183,9 +191,13 @@ def auth_hls(tmp_path_factory):
                     str(vod / "index.m3u8")], check=True, capture_output=True)
     live = d / "live"
     live.mkdir()
+    content = d / "content"
+    content.mkdir()
     for f in vod.glob("*.ts"):
         (live / f.name).write_bytes(f.read_bytes())
+        (content / f.name).write_bytes(f.read_bytes())
     text = (vod / "index.m3u8").read_text(encoding="utf-8")
+    (content / "hlsstream").write_text(text, encoding="utf-8")
     (live / "index.m3u8").write_text("\n".join(l for l in text.splitlines() if "ENDLIST" not in l and "PLAYLIST-TYPE" not in l) + "\n",
                                      encoding="utf-8")
     _AuthHandler.root = str(d)
@@ -262,6 +274,57 @@ def test_probe_endpoint(running_bridge, auth_hls):
     assert _call(b.port, "/probe", "https://evil.example", body)[0] == 403
     _pump()
     assert not got                                                   # 확인은 받기를 시작하지 않는다
+
+
+_STREAM_SCRIPT = r"""
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
+from app.workers import DownloadWorker
+url, out = sys.argv[2], sys.argv[3]
+app = QApplication([])
+res = {}
+w = DownloadWorker(url, out, "best", None, None, headers={"Authorization": "Bearer secret", "Cookie": "sess=ok"},
+                   title="다시보기", stream=True)
+w.done.connect(lambda p, e: (res.update(path=p, err=e), app.quit()))
+w.start()
+QTimer.singleShot(90000, app.quit)
+app.exec()
+w.wait(5000)
+print("RESULT=" + json.dumps(res, ensure_ascii=True))
+"""
+
+
+@needs_ffmpeg
+def test_stream_without_m3u8_extension(auth_hls, tmp_path):
+    """rplay 다시보기처럼 재생 목록 주소가 .m3u8 로 끝나지 않아도 (…/content/hlsstream?…) 확장이 보낸 스트림이면 받는다.
+    예전엔 주소만 보고 'rplay 페이지 주소' 로 오해해 거절했다 (0.9.13)."""
+    from app import ffmpeg_tools as ft
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", QT_QPA_PLATFORM="offscreen")
+    url = auth_hls + "/content/hlsstream?id=1"
+    r = subprocess.run([sys.executable, "-c", _STREAM_SCRIPT, ROOT, url, str(tmp_path)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=150, env=env)
+    line = next((l for l in r.stdout.splitlines() if l.startswith("RESULT=")), None)
+    assert line, (r.returncode, r.stdout[-800:], r.stderr[-1500:])
+    res = json.loads(line[len("RESULT="):])
+    assert res.get("path") and not res.get("err"), res
+    assert abs(ft.probe(res["path"])["duration"] - 10) < 1.0
+
+
+def test_rplay_stream_not_mistaken_for_page(tmp_path):
+    """rplay 호스트의 확장자 없는 재생 목록도 '페이지 주소' 로 거절하지 않는다 (네트워크 없이: 없는 도메인 → 받기 실패여야 함)."""
+    from app import live_record as lr
+    url = "http://api.rplay.live.invalid/content/hlsstream?id=1"
+    assert lr.unsupported_page(url)                     # 주소만 보면 rplay 페이지로 보인다 → stream 표시가 필요한 이유
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", QT_QPA_PLATFORM="offscreen")
+    r = subprocess.run([sys.executable, "-c", _STREAM_SCRIPT, ROOT, url, str(tmp_path)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=150, env=env)
+    line = next((l for l in r.stdout.splitlines() if l.startswith("RESULT=")), None)
+    assert line, (r.returncode, r.stdout[-800:], r.stderr[-1500:])
+    res = json.loads(line[len("RESULT="):])
+    assert not res.get("path") and res.get("err") and "페이지 주소" not in res["err"], res
 
 
 @needs_ffmpeg

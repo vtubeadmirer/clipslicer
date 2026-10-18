@@ -111,12 +111,16 @@ class DownloadWorker(QThread):
     liveStarted = Signal()   # m3u8 라이브 녹화를 시작함 → 대화상자가 '녹화 중지' 버튼을 보여 준다
 
     def __init__(self, url: str, out_dir: str, quality: str = "best", section: tuple[float, float] | None = None,
-                 parent=None, cookies: str = "", referer: str = "", headers: dict | None = None, title: str = ""):
+                 parent=None, cookies: str = "", referer: str = "", headers: dict | None = None, title: str = "",
+                 stream: bool = False):
         super().__init__(parent)
         self.url, self.out_dir, self.quality, self.section = url, out_dir, quality, section
         self.cookies, self.referer = cookies, referer
         self.headers = headers or {}  # 브라우저 확장이 넘긴 실제 요청 헤더 (쿠키 · 인증 포함) — 있으면 그대로 다시 보낸다
         self.title = title
+        # 확장이 응답 형식(mpegurl)으로 알아낸 재생 목록: 주소가 .m3u8 로 끝나지 않아도 (rplay 다시보기의
+        # .../content/hlsstream 등) 재생 목록으로 받는다 (페이지 주소로 오해해 거절하던 0.9.13 버그)
+        self.stream = stream
         self._cancel = False
         self._stop = False
         self._recorder = None
@@ -197,10 +201,10 @@ class DownloadWorker(QThread):
 
         try:
             from . import live_record
-            msg = live_record.unsupported_page(self.url)
+            msg = "" if self.stream else live_record.unsupported_page(self.url)
             if msg:
                 raise live_record.LiveError(msg)
-            if live_record.is_m3u8(self.url) and not self.section:
+            if (self.stream or live_record.is_m3u8(self.url)) and not self.section:
                 path = self._download_m3u8(yt_dlp, hook)
             elif self.section:
                 path = self._download_section(yt_dlp, hook)

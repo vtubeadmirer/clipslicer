@@ -433,4 +433,5 @@ def _default_worker(params: dict):
     from .workers import DownloadWorker
     return DownloadWorker(params["url"], params["out_dir"], params.get("quality") or "best", params.get("section"),
                           None, params.get("cookies") or "", params.get("referer") or "",
-                          headers=params.get("headers") or {}, title=params.get("title") or "")
+                          headers=params.get("headers") or {}, title=params.get("title") or "",
+                          stream=bool(params.get("stream")))

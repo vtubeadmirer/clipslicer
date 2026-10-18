@@ -2000,6 +2000,7 @@ class MainWindow(QMainWindow):
         params = {"url": req["url"], "out_dir": out_dir, "quality": self.settings.value("dl_quality", "best"),
                   "section": None, "cookies": cookie_file, "referer": "",
                   "headers": req["headers"] if req["kind"] == "stream" else {},
+                  "stream": req["kind"] == "stream",   # 확장이 잡은 재생 목록 (주소가 .m3u8 로 안 끝나도)
                   "title": req.get("title") or "", "page": req.get("page") or req["url"], "cookie_file": cookie_file}
         if not self.start_download(params) and cookie_file:
             try:
