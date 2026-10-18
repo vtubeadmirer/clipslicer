@@ -796,4 +796,5 @@ EN = {
     '전체': 'All',
     '전체 보기 (Ctrl+0)': 'Show all (Ctrl+0)',
     '재생 위치의 구간에 맞춰 확대 (Z)': 'Zoom to the segment at the playhead (Z)',
+    "rplay 는 페이지 주소로는 받을 수 없습니다. 크롬에서 방송을 재생한 뒤 'ClipSlicer 연결' 확장 목록에서 '녹화/받기' 를 누르세요 (성인 · 멤버십 방송은 로그인 · 인증 후 영상이 재생돼야 목록에 뜹니다).": "rplay can't be downloaded from its page address. Play the stream in Chrome, then press Record/Get in the ClipSlicer extension list (age-restricted or members-only streams only appear once you're signed in and the video plays).",
 }

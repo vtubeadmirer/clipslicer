@@ -278,10 +278,14 @@ class DownloadWorker(QThread):
         self.progress.emit(0.97, tr("mp4 로 정리 중…"))
         mp4 = base + ".mp4"
         if lr.remux_to_mp4(ts, mp4):
-            try:
-                os.remove(ts)
-            except OSError:
-                pass
+            for _ in range(20):   # 막 딴 실시간 클립이 아직 .ts 를 읽고 있으면 지워지지 않으므로 잠깐 기다렸다 다시
+                try:
+                    os.remove(ts)
+                    break
+                except FileNotFoundError:
+                    break
+                except OSError:
+                    time.sleep(0.5)
             return mp4
         return ts  # 정리에 실패해도 .ts 는 그대로 열 수 있다
 

@@ -44,27 +44,11 @@ def shared_profile() -> QWebEngineProfile:
         _PROFILE.setPersistentStoragePath(profile_dir())
         _PROFILE.setCachePath(os.path.join(profile_dir(), "cache"))
         _PROFILE.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
-        # 구글 등은 'QtWebEngine' 이 들어간 내장 브라우저의 로그인을 막는다 → 일반 크롬과 같은 식별 문자열
+        _PROFILE.setHttpCacheMaximumSize(64 * 1024 * 1024)   # 내장 브라우저 캐시가 계속 커지지 않게
+        # 'QtWebEngine/x' 토큰을 모르는 사이트가 깨지는 경우가 있어 뺀다 (사이트 호환용).
+        # 구글 로그인은 앱 안 브라우저를 일부러 막으므로 우회하지 않는다 → 브라우저 확장 연결을 쓰면 된다.
         _PROFILE.setHttpUserAgent(clean_user_agent(_PROFILE.httpUserAgent()))
-        _apply_chrome_client_hints(_PROFILE)
     return _PROFILE
-
-
-def chrome_brands(full_list: dict) -> dict:
-    """Client Hints 브랜드에 'Google Chrome' 을 넣는다. 구글 로그인은 이 값이 없으면 내장 브라우저로 보고 막는다."""
-    out = dict(full_list or {})
-    ver = out.get("Chromium") or next((v for k, v in out.items() if "Brand" not in k), "140.0.0.0")
-    out.setdefault("Chromium", ver)
-    out["Google Chrome"] = ver
-    return out
-
-
-def _apply_chrome_client_hints(profile):
-    try:
-        ch = profile.clientHints()
-        ch.setFullVersionList(chrome_brands(ch.fullVersionList()))
-    except Exception:  # 구버전 Qt 에는 clientHints 가 없다
-        LOG.info("Client Hints 설정 불가", exc_info=True)
 
 
 def clean_user_agent(ua: str) -> str:

@@ -15,10 +15,6 @@ class FlowLayout(QLayout):
         self._h, self._v = hspacing, vspacing
         self.setContentsMargins(QMargins(0, 0, 0, 0))
 
-    def __del__(self):
-        while self.count():
-            self.takeAt(0)
-
     def addItem(self, item):
         self._items.append(item)
 

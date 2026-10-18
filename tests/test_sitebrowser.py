@@ -31,8 +31,7 @@ def test_clean_user_agent():
     assert clean_user_agent("") == ""
 
 
-def test_chrome_brands():
-    from app.sitebrowser import chrome_brands
-    b = chrome_brands({"Chromium": "140.0.7339.225", "Not=A?Brand": "24.0.0.0"})
-    assert b["Google Chrome"] == "140.0.7339.225" and b["Chromium"] == "140.0.7339.225" and "Not=A?Brand" in b
-    assert chrome_brands({})["Google Chrome"]
+def test_no_google_chrome_brand_spoofing():
+    """구글의 앱 안 브라우저 로그인 차단을 우회하는 Client Hints 위장은 하지 않는다 (확장 연결로 대신)."""
+    import app.sitebrowser as sb
+    assert not hasattr(sb, "chrome_brands") and not hasattr(sb, "_apply_chrome_client_hints")

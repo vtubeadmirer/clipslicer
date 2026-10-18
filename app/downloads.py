@@ -57,7 +57,7 @@ class DownloadRow(QFrame):
         self.started = time.time()
         self.live_since = 0.0
         self.clips: list[str] = []
-        self._clipping = 0
+        self._pending: set[str] = set()   # 만드는 중인 클립 경로
         self.setFrameShape(QFrame.StyledPanel)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 6)
@@ -140,23 +140,28 @@ class DownloadRow(QFrame):
         if st is None:
             return False
         ts, out_t, base = st
-        name = f"{os.path.basename(base)} clip {time.strftime('%H%M%S')} ({int(seconds)}s).mp4"
-        dst = os.path.join(base + "_clips", name)
-        self._clipping += 1
+        stem = f"{os.path.basename(base)} clip {time.strftime('%H%M%S')} ({int(seconds)}s)"
+        dst = os.path.join(base + "_clips", stem + ".mp4")
+        n = 2
+        while os.path.exists(dst) or dst in self._pending:   # 같은 초에 두 번 눌러도 덮어쓰지 않게
+            dst = os.path.join(base + "_clips", f"{stem} {n}.mp4")
+            n += 1
+        self._pending.add(dst)
         self.lbl_status.setText(tr("✂ 클립 만드는 중… (지난 {0}초)").format(int(seconds)))
 
         def run():
             from . import live_record as lr
             try:
-                self.clipDone.emit(lr.clip_recent(ts, out_t - delay, seconds, dst), "")
+                path, err = lr.clip_recent(ts, out_t - delay, seconds, dst), ""
             except Exception as ex:   # 클립 실패가 녹화를 멈추면 안 된다
                 LOG.warning("클립 실패: %s", ex)
-                self.clipDone.emit("", str(ex))
+                path, err = "", str(ex)
+            self._pending.discard(dst)
+            self.clipDone.emit(path, err)
         threading.Thread(target=run, name="clip", daemon=True).start()
         return True
 
     def _on_clip_done(self, path: str, error: str):
-        self._clipping = max(0, self._clipping - 1)
         if path:
             self.clips.append(path)
             self.b_clips.setText(tr("클립 {0}개").format(len(self.clips)))

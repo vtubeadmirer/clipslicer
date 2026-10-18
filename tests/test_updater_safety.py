@@ -191,6 +191,20 @@ def test_other_instances_with_korean_folder(tmp_path):
     assert str(other.pid) in line.split("=", 1)[1].split(","), line
 
 
+def test_remove_backup_only_touches_backup(tmp_path):
+    """업데이트 후 남던 _backup(이전 버전 전체 사본)을 지운다. 사용자 데이터 · 프로그램 파일은 그대로."""
+    app = _app(tmp_path / "app")
+    _user_data(app)
+    (app / "_backup" / "_internal").mkdir(parents=True)
+    (app / "_backup" / "_internal" / "core.dll").write_bytes(b"x" * 5000)
+    (app / "_backup" / "ClipSlicer.exe").write_bytes(b"old")
+    assert updater.remove_backup(str(app)) >= 5003
+    assert not (app / "_backup").exists()
+    assert (app / "youtube_token.bin").exists() and (app / "web_profile" / "Cookies").exists()
+    assert (app / "_internal" / "core.dll").read_bytes() == b"OLD" and (app / "settings.ini").exists()
+    assert updater.remove_backup(str(app)) == 0          # 두 번째는 할 일 없음
+
+
 def test_restore_user_data_from_backup(tmp_path):
     """0.9.4 이하 교체 스크립트가 지운 사용자 데이터를 0.9.5 첫 실행에서 되살린다 (기존 파일은 덮어쓰지 않음)."""
     app = tmp_path / "app"

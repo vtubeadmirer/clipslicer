@@ -14,8 +14,22 @@ function isPlaylistType(headers) {
   return !!ct && /mpegurl/i.test(ct.value || "");
 }
 
+// 서비스 워커가 대신 받은 요청은 tabId 가 -1 → 그 요청을 낸 사이트(initiator)의 탭으로 돌린다 (활성 탭 우선)
+async function tabForRequest(d) {
+  if (d.tabId >= 0) return d.tabId;
+  if (!d.initiator || !/^https?:/.test(d.initiator)) return -1;
+  try {
+    const tabs = await chrome.tabs.query({ url: d.initiator + "/*" });
+    if (!tabs.length) return -1;
+    const active = tabs.find(t => t.active);
+    return (active || tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0]).id;
+  } catch {
+    return -1;
+  }
+}
+
 chrome.webRequest.onSendHeaders.addListener(d => {
-  if (d.tabId < 0) return;
+  if (d.tabId < 0 && !d.initiator) return;
   const headers = {};
   for (const h of d.requestHeaders || []) {
     if (!DROP_HEADERS.has(h.name.toLowerCase()) && h.value !== undefined) headers[h.name] = h.value;
@@ -30,8 +44,11 @@ chrome.webRequest.onSendHeaders.addListener(d => {
 chrome.webRequest.onResponseStarted.addListener(async d => {
   const req = pending.get(d.requestId);
   pending.delete(d.requestId);
-  if (!req || d.tabId < 0 || d.statusCode >= 400) return;
+  if (!req || d.statusCode >= 400) return;
   if (!isPlaylistUrl(d.url) && !isPlaylistType(d.responseHeaders)) return;
+  const tabId = await tabForRequest(d);
+  if (tabId < 0) return;
+  d = { ...d, tabId };
   const key = "tab" + d.tabId;
   const got = (await chrome.storage.session.get(key))[key] || [];
   const base = d.url.split("?")[0];

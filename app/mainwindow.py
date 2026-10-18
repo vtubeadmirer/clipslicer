@@ -898,7 +898,8 @@ class MainWindow(QMainWindow):
 
     def _forget_work_files(self, path: str):
         """영상은 두고 ClipSlicer 가 만든 작업 파일(마커 등) · 백업 · 분석 캐시를 지우고 최근 목록에서도 뺀다."""
-        if path in self.projects:
+        path = os.path.abspath(path)
+        if any(os.path.normcase(p) == os.path.normcase(path) for p in self.projects):
             QMessageBox.information(self, tr("작업 파일 삭제"), tr("지금 열려 있는 영상입니다. 파일 목록에서 닫은 뒤 다시 시도하세요."))
             return
         if QMessageBox.question(self, tr("작업 파일 삭제"),

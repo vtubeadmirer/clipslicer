@@ -246,4 +246,4 @@ def test_worker_live_m3u8_stop_saves_mp4(hls_server, tmp_path):
 
 def test_worker_rejects_rplay_page(tmp_path):
     res = _run_worker("https://rplay.live/live/69f764ae5690cb201aae393f", tmp_path, "")
-    assert not res.get("path") and "m3u8" in res.get("err", "")
+    assert not res.get("path") and "확장" in res.get("err", "")

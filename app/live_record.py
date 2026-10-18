@@ -54,8 +54,8 @@ def unsupported_page(url: str) -> str:
     """페이지 주소로는 못 받는 사이트면 안내 문구, 아니면 ''."""
     host = urllib.parse.urlparse(url).netloc.lower()
     if "rplay.live" in host and not is_m3u8(url):
-        return tr("rplay 페이지 주소는 직접 받을 수 없습니다. 방송의 m3u8 주소를 넣어 주세요 "
-                  "(브라우저 개발자 도구 ▸ 네트워크에서 'm3u8' 로 검색하거나 rplay_dl.py 로 찾을 수 있습니다).")
+        return tr("rplay 는 페이지 주소로는 받을 수 없습니다. 크롬에서 방송을 재생한 뒤 'ClipSlicer 연결' 확장 목록에서 "
+                  "'녹화/받기' 를 누르세요 (성인 · 멤버십 방송은 로그인 · 인증 후 영상이 재생돼야 목록에 뜹니다).")
     return ""
 
 

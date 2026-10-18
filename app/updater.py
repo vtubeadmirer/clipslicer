@@ -370,6 +370,30 @@ def restore_user_data(app_dir: str | None = None) -> list[str]:
     return restored
 
 
+def remove_backup(app_dir: str | None = None) -> int:
+    """업데이트 후 새 버전이 정상으로 켜지면 _backup(이전 버전 전체 사본, 약 650 MB)을 지운다.
+
+    _backup 은 교체가 실패했을 때 되돌리기 위한 것이라, 새 버전이 실행된 뒤에는 필요 없다.
+    (0.9.13 까지는 지우지 않아 프로그램 폴더가 두 배로 커졌다.) restore_user_data 다음에 부를 것. 지운 바이트 수.
+    """
+    backup = os.path.join(app_dir or base_dir(), "_backup")
+    if not os.path.isdir(backup):
+        return 0
+    size = 0
+    for dirpath, _dirs, files in os.walk(backup):
+        for f in files:
+            try:
+                size += os.path.getsize(os.path.join(dirpath, f))
+            except OSError:
+                pass
+    shutil.rmtree(backup, ignore_errors=True)
+    if os.path.isdir(backup):
+        LOG.warning("이전 버전 백업을 다 지우지 못함: %s", backup)
+    else:
+        LOG.info("이전 버전 백업 삭제: %.0f MB", size / 1e6)
+    return size
+
+
 def update_in_progress(app_dir: str | None = None, max_age: float = 600.0) -> bool:
     """교체 스크립트가 지금 이 폴더를 바꾸는 중인가 (잠금 파일이 있고 10분이 안 지남)."""
     p = os.path.join(app_dir or base_dir(), LOCK_NAME)

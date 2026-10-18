@@ -67,6 +67,9 @@ def main():
         LOG.warning("업데이트 적용 중이라 실행하지 않음")
         QMessageBox.information(None, "ClipSlicer", tr("업데이트를 적용하는 중입니다. 끝나면 자동으로 다시 열립니다.\n잠시 뒤에 다시 실행해 주세요."))
         return 0
+    # 지금 버전이 정상으로 켜졌으니 이전 버전 사본(_backup, 약 650 MB)은 필요 없다 — 시작을 늦추지 않게 뒤에서 지운다
+    import threading
+    threading.Thread(target=updater.remove_backup, name="remove-backup").start()
 
     missing = missing_tools()
     if missing:
