@@ -49,15 +49,18 @@ chrome.webRequest.onResponseStarted.addListener(async d => {
   const tabId = await tabForRequest(d);
   if (tabId < 0) return;
   d = { ...d, tabId };
+  // 잡을 때의 페이지 주소: 새로고침 없이 다른 영상으로 넘어가는 사이트(rplay 등)에서 이전 영상과 섞이지 않게
+  let page = "";
+  try { page = (await chrome.tabs.get(tabId)).url || ""; } catch {}
   const key = "tab" + d.tabId;
   const got = (await chrome.storage.session.get(key))[key] || [];
-  const base = d.url.split("?")[0];
-  const list = got.filter(s => s.url.split("?")[0] !== base);
-  list.unshift({ url: d.url, headers: req.headers, t: Date.now() });
+  // 주소 전체가 같을 때만 합친다: rplay 처럼 경로는 같고 ?뒤(영상 id)만 다른 미리보기가 본 영상을 덮어쓰지 않게
+  const list = got.filter(s => s.url !== d.url);
+  list.unshift({ url: d.url, headers: req.headers, t: Date.now(), page });
   list.length = Math.min(list.length, MAX_PER_TAB);
   await chrome.storage.session.set({ [key]: list });
-  chrome.action.setBadgeText({ tabId: d.tabId, text: String(list.length) });
-  chrome.action.setBadgeBackgroundColor({ tabId: d.tabId, color: "#e53935" });
+  chrome.action.setBadgeText({ tabId: d.tabId, text: String(list.length) }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ tabId: d.tabId, color: "#e53935" }).catch(() => {});
 }, { urls: ["<all_urls>"], types: ["xmlhttprequest", "media", "other"] }, ["responseHeaders"]);
 
 chrome.webRequest.onErrorOccurred.addListener(d => pending.delete(d.requestId), { urls: ["<all_urls>"] });
@@ -66,7 +69,7 @@ chrome.webRequest.onErrorOccurred.addListener(d => pending.delete(d.requestId), 
 chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status === "loading" && info.url) {
     chrome.storage.session.remove("tab" + tabId);
-    chrome.action.setBadgeText({ tabId, text: "" });
+    chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
   }
 });
 chrome.tabs.onRemoved.addListener(tabId => chrome.storage.session.remove("tab" + tabId));
@@ -84,13 +87,14 @@ chrome.commands.onCommand.addListener(async command => {
     text = "!";   // ClipSlicer 가 꺼져 있음
   }
   if (tab) {
-    chrome.action.setBadgeText({ tabId: tab.id, text });
-    chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: text === "✂" ? "#2e7d32" : "#c62828" });
+    // 탭이 그새 닫혔으면 배지 설정이 실패한다 → 무시 (확장 '오류' 목록에 쌓이지 않게)
+    chrome.action.setBadgeText({ tabId: tab.id, text }).catch(() => {});
+    chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: text === "✂" ? "#2e7d32" : "#c62828" }).catch(() => {});
     setTimeout(async () => {   // 잠깐 보여 준 뒤 원래 숫자로
       const key = "tab" + tab.id;
       const list = (await chrome.storage.session.get(key))[key] || [];
-      chrome.action.setBadgeText({ tabId: tab.id, text: list.length ? String(list.length) : "" });
-      chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#e53935" });
+      chrome.action.setBadgeText({ tabId: tab.id, text: list.length ? String(list.length) : "" }).catch(() => {});
+      chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#e53935" }).catch(() => {});
     }, 2000);
   }
 });

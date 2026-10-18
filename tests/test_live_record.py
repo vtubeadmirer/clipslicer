@@ -135,7 +135,9 @@ def test_describe_playlists(hls_server):
     assert m["variant_paths"] == [{"height": 180, "path": "/vod/index.m3u8"}]
     v = lr.describe(hls_server["base"] + "/live/index.m3u8", hdr)
     assert v["kind"] == "media" and v["live"] is True and not v["drm"], v
-    assert lr.describe(hls_server["base"] + "/vod/index.m3u8", hdr)["live"] is False
+    vod = lr.describe(hls_server["base"] + "/vod/index.m3u8", hdr)
+    assert vod["live"] is False and abs(vod["duration"] - 12) < 0.5      # 다시보기는 길이로 구별
+    assert abs(m["duration"] - 12) < 0.5 and "duration" not in v          # 마스터도 길이, 라이브는 없음
     bad = lr.describe(hls_server["base"] + "/master.m3u8", lr.request_headers())
     assert bad["error"] and not bad["kind"]
 

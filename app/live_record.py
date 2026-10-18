@@ -201,6 +201,11 @@ def variants(master_text: str, base_url: str) -> list[dict]:
     return out
 
 
+def playlist_duration(media_text: str) -> float:
+    """미디어 재생 목록의 길이(초) = #EXTINF 합. (다시보기를 팝업에서 '12:34' 로 구별하려고)"""
+    return round(sum(float(m.group(1)) for m in re.finditer(r"#EXTINF:\s*([\d.]+)", media_text)), 1)
+
+
 def describe(url: str, headers: dict, timeout: int = 8) -> dict:
     """확장 팝업에 보여 줄 재생 목록 정보 (브라우저 헤더 그대로 받아 본다).
 
@@ -229,9 +234,13 @@ def describe(url: str, headers: dict, timeout: int = 8) -> dict:
                 sub = fetch_text(v_url, headers, timeout)
                 info["live"] = is_live(sub)
                 info["drm"] = info["drm"] or drm_reason(sub)
+                if not info["live"]:
+                    info["duration"] = playlist_duration(sub)
         else:
             info["kind"] = "media"
             info["live"] = is_live(text)
+            if not info["live"]:
+                info["duration"] = playlist_duration(text)
     except LiveError as ex:
         info["error"] = str(ex)[:200]
     return info

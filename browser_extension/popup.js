@@ -99,16 +99,31 @@ async function render() {
       try { it.height = pathHeight[new URL(it.s.url).pathname] || 0; } catch { it.height = 0; }
     }
   }
-  const usable = it => it.info && !it.info.error && !it.info.drm && !it.info.audio_only;
-  const score = it => !usable(it) ? -1 :
-    (it.info.kind === "master" ? 3 : 1) + (it.info.live ? 2 : 0) + (it.height || 0) / 10000 + it.s.t / 1e16;
-  items.sort((a, b) => score(b) - score(a));
-  const best = items.find(usable);
-
+  // 지금 페이지에서 잡힌 것인지 · 이 페이지의 영상 id 가 재생 목록 주소에 들어 있는지
+  const cur = pageKey(tab.url);
+  const ids = pageIds(tab.url);
   for (const it of items) {
+    it.samePage = !it.s.page || pageKey(it.s.page) === cur;   // (예전 버전이 잡은 것은 페이지 정보가 없음)
+    it.pageMatch = ids.some(id => it.s.url.includes(id));
+  }
+  const usable = it => it.info && !it.info.error && !it.info.drm && !it.info.audio_only;
+  const score = it => (it.pageMatch ? 20 : 0) + (it.samePage ? 10 : 0) + (!usable(it) ? -5 :
+    (it.info.kind === "master" ? 3 : 1) + (it.info.live ? 2 : 0) + (it.height || 0) / 10000) + it.s.t / 1e16;
+  items.sort((a, b) => score(b) - score(a));
+  const best = items.find(it => usable(it) && it.samePage) || items.find(usable);
+
+  let olderShown = false;
+  for (const it of items) {
+    if (!it.samePage && !olderShown) {   // 새로고침 없이 넘어오기 전 페이지에서 잡힌 것은 아래에 흐리게
+      olderShown = true;
+      const h = document.createElement("div");
+      h.className = "hint";
+      h.textContent = "이전 페이지에서 잡힌 것 (지금 보는 영상이 아닐 수 있음)";
+      box.appendChild(h);
+    }
     const { s, info } = it;
     const row = document.createElement("div");
-    row.className = "item";
+    row.className = "item" + (it.samePage ? "" : " older");
     const text = document.createElement("div");
     text.className = "name";
     const main = document.createElement("div");
@@ -123,6 +138,13 @@ async function render() {
       tag.textContent = "추천";
       main.appendChild(tag);
     }
+    if (it.pageMatch) {
+      const tag = document.createElement("span");
+      tag.className = "tag page";
+      tag.textContent = "이 페이지 영상";
+      tag.title = "재생 목록 주소에 이 페이지의 영상 번호가 들어 있습니다";
+      main.appendChild(tag);
+    }
     main.appendChild(document.createTextNode(describeText(info, it.height)));
     text.append(main, sub);
     const b = document.createElement("button");
@@ -135,11 +157,28 @@ async function render() {
   }
 }
 
+function pageKey(url) {
+  return (url || "").split("#")[0].replace(/\/+$/, "");
+}
+
+// 페이지 주소의 영상 번호 같은 긴 토큰 (예: rplay.live/play/6ad1fd501c71… → '6ad1fd501c71…')
+function pageIds(url) {
+  try {
+    return new URL(url).pathname.split("/").filter(p => /^[A-Za-z0-9_-]{10,}$/.test(p));
+  } catch { return []; }
+}
+
+function fmtDur(sec) {
+  sec = Math.round(sec || 0);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
+}
+
 function describeText(info, height) {
   if (!info) return "종류 확인 안 됨 (ClipSlicer 를 켜거나 최신으로 업데이트)";
   if (info.drm) return "DRM 보호 — 받을 수 없음";
   if (info.error) return "확인 실패 — 토큰이 만료됐을 수 있음";
-  const live = info.live === true ? "실시간" : info.live === false ? "다시보기" : "";
+  const live = info.live === true ? "실시간" : info.live === false ? "다시보기" + (info.duration ? " " + fmtDur(info.duration) : "") : "";
   if (info.audio_only) return ["소리만", live].filter(Boolean).join(" · ");
   if (info.kind === "master") {
     const hs = info.heights;

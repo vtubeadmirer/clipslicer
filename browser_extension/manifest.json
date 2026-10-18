@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipSlicer 연결",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "브라우저에서 재생 중인 방송·영상을 내 PC 의 ClipSlicer 로 보내 녹화/다운로드합니다. 정보는 이 PC(127.0.0.1) 밖으로 나가지 않습니다.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAryK1N7BykbT0KQbDuATJhnngxgZudERHSZfyc2MikNxJaxaOYur0Ps7+iijad/7gUuEMkKDbLcPngDV6zHo89CiYPBoBqVtjDarNBr4H6JiYi1C39bC99101AgfZKaiKnLRdwfdmsxy3Z8OYqUqNBC6nVtF/ZYsmxXtGcOg4qk7xUmbOMR93zlxZaad5m+oL0Ty9f79A7fzvy1VPDgJ4xxz+16Cn89LytIiLGIpQxgaBWrR3ek16lLSf+BWXCwMGz+j7k7Nn/uo7lkHTLzp2wtSrL3HrDAaT8ZV8liR1NlNrPsifZxd+lHzQhd8+6Z8lGnCXV6OR6WDOFw07PLV6hQIDAQAB",
   "permissions": [
