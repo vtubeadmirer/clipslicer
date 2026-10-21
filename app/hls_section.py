@@ -48,6 +48,20 @@ def parse_playlist(text: str, base_url: str, extra_query: str = "") -> list[tupl
     return segs
 
 
+def init_segment(text: str, base_url: str, extra_query: str = "") -> str:
+    """fMP4 HLS 의 초기화 조각(#EXT-X-MAP URI) 주소, 없으면 ''.
+
+    치지직 다시보기 · 라이브는 조각이 fMP4(.m4v)라 이 머리 조각(moov)을 맨 앞에 붙여야 ffmpeg 가 읽는다
+    (없으면 'trun track id unknown, no tfhd was found')."""
+    m = re.search(r'#EXT-X-MAP:.*?URI="([^"]+)"', text)
+    if not m:
+        return ""
+    url = urllib.parse.urljoin(base_url, m.group(1))
+    if extra_query and extra_query not in url:
+        url += ("&" if "?" in url else "?") + extra_query
+    return url
+
+
 def select_segments(segs: list[tuple[float, float, str]], start: float, end: float) -> list[tuple[float, float, str]]:
     """[start, end] 와 겹치는 세그먼트만."""
     return [s for s in segs if s[0] + s[1] > start and s[0] < end]
@@ -96,7 +110,10 @@ def download_section(playlist_url: str, start: float, end: float, dst: str, extr
                 last_err = ex
         raise RuntimeError(tr("세그먼트 {0} 다운로드 실패: {1}").format(i, last_err))
 
+    init = init_segment(text, playlist_url, extra_query)
     with open(dst, "wb") as out, ThreadPoolExecutor(max_workers=workers) as pool:
+        if init:   # fMP4: 머리 조각을 먼저 (ffmpeg 는 내용으로 형식을 알아보므로 파일 확장자는 상관없다)
+            out.write(fetch(init))
         next_write = 0
         for i, data in pool.map(get, range(total)):
             if cancel and cancel():
