@@ -184,6 +184,11 @@ class MainWindow(QMainWindow):
         fb.addWidget(btn_add)
         fb.addWidget(btn_rm)
         lv.addLayout(fb)
+        btn_join = QPushButton(tr("⧉ 이어 붙이기"))
+        btn_join.setToolTip(tr("목록의 영상들을 순서대로 하나로 합칩니다 (Ctrl+Shift+J)"))
+        btn_join.setFocusPolicy(Qt.NoFocus)
+        btn_join.clicked.connect(self.join_videos)
+        lv.addWidget(btn_join)
         root.addWidget(left)
 
         # ---- 가운데: 플레이어 + 타임라인 + 컨트롤 ----
@@ -550,6 +555,11 @@ class MainWindow(QMainWindow):
         a.setShortcut("Ctrl+Alt+L")
         a.setToolTip(tr("rplay 처럼 로그인이 필요한 방송 페이지를 열고, 재생되면 버튼 한 번으로 녹화합니다"))
         a.triggered.connect(lambda: self.open_site_recorder())
+        m_file.addAction(a)
+        a = QAction(tr("영상 이어 붙이기…"), self)
+        a.setShortcut("Ctrl+Shift+J")
+        a.setToolTip(tr("여러 영상(또는 그 안의 켜진 구간)을 순서대로 하나로 합칩니다"))
+        a.triggered.connect(self.join_videos)
         m_file.addAction(a)
         a = QAction(tr("녹화 · 다운로드 목록…"), self)
         a.setShortcut("Ctrl+J")
@@ -1940,6 +1950,21 @@ class MainWindow(QMainWindow):
             self.notifier.notify(tr("녹화 · 다운로드"), tr("이미 녹화 · 다운로드 중인 방송입니다: {0}").format(params.get("title") or params["url"][:80]))
             return False
         return True
+
+    # ---- 영상 이어 붙이기 ----
+    def join_videos(self):
+        """목록의 영상들(목록 순서)로 이어 붙이기 창을 연다. 창에서 순서 · 빼기 · 추가 · 켜진 구간만 을 고른다."""
+        from .join import JoinDialog
+        paths = [self.file_list.item(i).data(Qt.UserRole) for i in range(self.file_list.count())]
+        gpu = self.gpu_encoder if self.act_gpu.isChecked() else None
+        d = JoinDialog(self, paths, self.projects, gpu)
+        d.fileReady.connect(self._on_joined)
+        d.exec()
+
+    def _on_joined(self, path: str):
+        self.notifier.notify(tr("이어 붙이기 완료"), os.path.basename(path))
+        self.add_files([path])
+        self.statusBar().showMessage(tr("이어 붙인 영상: {0}").format(path), 6000)
 
     def _on_clip_saved(self, path: str, error: str):
         if path:

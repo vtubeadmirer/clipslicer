@@ -296,6 +296,16 @@ the <b>global hotkey</b> (default <kbd>Ctrl+Alt+C</kbd>, works while a game or b
 <div class="tip">Clips are cut without re-encoding, so the start may move back 1–2 seconds to a keyframe. Recording keeps going.
 Change the extension shortcut at <code>chrome://extensions/shortcuts</code>.</div>
 
+<h2>Join videos (several files into one)</h2>
+<p><b>File ▸ Join videos…</b> (<kbd>Ctrl+Shift+J</kbd>) or <b>⧉ Join</b> under the video list. The videos in the list appear in a window;
+reorder with <b>▲ ▼</b>, and use <b>Remove / Add…</b>. For videos split with markers, choose <b>enabled segments</b> under <b>Use</b> to join only your highlights.</p>
+<ul>
+ <li>If codec, resolution, fps and audio format are <b>all the same</b>, the videos are joined in seconds without re-encoding (original quality).</li>
+ <li>If they <b>differ</b>, everything is re-encoded to the largest frame size and highest fps (max 60); smaller videos are centered with black bars and silent videos get silence.</li>
+ <li>The window shows which method will be used and why, plus the total length. <b>Normalize loudness</b> evens out volume between videos.</li>
+</ul>
+<div class="tip">Enabled-segment cuts are made without re-encoding, so a segment may start 1–2 seconds early at a keyframe. The result is saved as mp4 and opened in the list.</div>
+
 <h2>Stream bookmark mode</h2>
 <p><b>File ▸ Stream bookmark mode…</b>. A small always-on-top window appears. While streaming or recording, press the <b>global hotkey</b> (default <kbd>Ctrl+Alt+B</kbd>)
 whenever a moment is worth clipping and the time is recorded. It works even when OBS or a game is in front. Choose between <kbd>Ctrl+Alt+B</kbd> / <kbd>Ctrl+Alt+M</kbd> / <kbd>Ctrl+Shift+B</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd>;

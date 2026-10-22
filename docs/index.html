@@ -65,7 +65,7 @@
   <div class="grp">편의 기능</div>
   <a href="#silence">자동 마커</a><a href="#merge">합치기 · 오디오 · 쇼츠</a><a href="#url">URL 에서 열기</a><a href="#youtube">유튜브 올리기</a><a href="#save">자동 저장 · 설정</a>
   <div class="grp">방송인용 (0.8)</div>
-  <a href="#extension">브라우저 확장 연결</a><a href="#downloads">동시 녹화</a><a href="#clips">실시간 클립</a><a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
+  <a href="#extension">브라우저 확장 연결</a><a href="#downloads">동시 녹화</a><a href="#clips">실시간 클립</a><a href="#join">영상 이어 붙이기</a><a href="#bookmark">방송 북마크</a><a href="#reaction">큰 소리 · 채팅 반응 마커</a><a href="#notes">구간 메모 · 합치기 순서</a><a href="#effects">출력 효과</a><a href="#publish">프리셋 · 예약 · 이력</a><a href="#discord">디스코드로 보내기</a><a href="#startpanel">시작 화면 · 알림</a>
   <div class="grp">기타</div>
   <a href="#faq">문제 해결</a><a href="#install">설치 · 빌드</a>
 </nav>
@@ -351,6 +351,17 @@ DRM 이 걸린 영상은 받을 수 없습니다. 본인 방송이나 허락받�
 </ul>
 <div class="tip">재인코딩 없이 잘라 바로 저장되며, 시작점은 키프레임에 맞춰 1~2초 앞당겨질 수 있습니다. 녹화는 멈추지 않습니다.
 확장 단축키는 <code>chrome://extensions/shortcuts</code> 에서 바꿀 수 있습니다.</div>
+
+<h2 id="join">영상 이어 붙이기 (여러 파일을 하나로)</h2>
+<p><b>파일 ▸ 영상 이어 붙이기…</b> (<kbd>Ctrl+Shift+J</kbd>) 또는 영상 목록 아래 <b>⧉ 이어 붙이기</b>. 목록의 영상들이 들어간 창이 열리고,
+<b>▲ ▼</b> 로 순서를 바꾸고 <b>빼기 · 추가…</b> 로 고릅니다. 마커로 나눠 둔 영상은 <b>넣을 부분</b>에서 <b>켜진 구간만</b>을 고를 수 있어,
+녹화 여러 개에서 잘라 둔 하이라이트만 이어 붙일 수 있습니다.</p>
+<ul>
+ <li>코덱 · 해상도 · fps · 소리 형식이 <b>모두 같으면</b> 재인코딩 없이 몇 초 만에 이어 붙입니다 (화질 그대로).</li>
+ <li><b>다르면</b> 가장 큰 화면 · 높은 fps(최대 60)에 맞춰 재인코딩합니다. 크기가 다른 영상은 가운데 두고 검은 여백, 소리 없는 영상은 무음으로 채웁니다.</li>
+ <li>창 아래에 어느 방식인지와 이유, 합친 길이가 미리 보입니다. <b>음량 정규화</b>로 영상마다 다른 소리 크기를 맞출 수 있습니다.</li>
+</ul>
+<div class="tip">'켜진 구간만' 은 재인코딩 없이 자르므로 구간 시작이 키프레임에 맞춰 1~2초 앞당겨질 수 있습니다. 결과는 mp4 로 저장되고 바로 목록에 열립니다.</div>
 
 <h2 id="bookmark">방송 북마크 모드</h2>
 <p>방송·녹화 중에 "이거 나중에 클립" 싶은 순간을 기록해 두는 기능입니다. <b>파일 ▸ 방송 북마크 모드…</b> 를 열면 항상 위에 떠 있는 작은 창이 나오고,
