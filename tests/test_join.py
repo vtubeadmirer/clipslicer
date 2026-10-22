@@ -38,11 +38,14 @@ def test_render_target():
     assert render_target([_it(_info(853, 481, 25))])[0] == (852, 480)   # 짝수로
 
 
-def _make(path, w, h, fps, dur, audio=True):
+def _make(path, w, h, fps, dur, audio=True, offset=0):
     cmd = [find_tool("ffmpeg"), "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={w}x{h}:rate={fps}:duration={dur}"]
     if audio:
         cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={dur}", "-c:a", "aac", "-shortest"]
-    cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-g", str(fps), "-pix_fmt", "yuv420p", str(path)]
+    cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-g", str(fps), "-pix_fmt", "yuv420p"]
+    if offset:
+        cmd += ["-output_ts_offset", str(offset)]   # 시간 기록이 0 이 아닌 곳에서 시작하는 파일 (다운로더 · 녹화)
+    cmd += [str(path)]
     subprocess.run(cmd, check=True, capture_output=True)
 
 
@@ -70,6 +73,25 @@ def test_join_same_format_copy_and_segments(tmp_path):
     # 켜진 구간만: a 의 1~3초 + b 전체
     res = _run([{"path": str(a), "parts": [(1.0, 3.0)]}, {"path": str(b), "parts": [(0.0, 3.0)]}], tmp_path / "seg.mp4")
     assert res.get("path") and abs(ft.probe(res["path"])["duration"] - 5.0) < 1.2, res
+
+
+@needs_ffmpeg
+def test_join_files_with_offset_start_time(tmp_path):
+    """시작 시간 기록이 0 이 아닌 파일(치지직 다운로더 등): 예전엔 두 번째 영상이 통째로 빠지고 끝이 잘렸다 (0.9.18)."""
+    from app import ffmpeg_tools as ft
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    _make(a, 320, 180, 30, 8, offset=155)
+    _make(b, 320, 180, 30, 4, offset=300)
+    assert ft.probe(str(a))["start_time"] > 150
+    res = _run([{"path": str(a), "parts": [(0.0, ft.probe(str(a))["duration"])]},
+                {"path": str(b), "parts": [(0.0, ft.probe(str(b))["duration"])]}], tmp_path / "whole.mp4")
+    assert res.get("path") and abs(ft.probe(res["path"])["duration"] - 12.0) < 0.6, res
+    res = _run([{"path": str(a), "parts": [(2.0, 6.0)]}, {"path": str(b), "parts": [(1.0, 3.0)]}], tmp_path / "segs.mp4")
+    assert res.get("path") and abs(ft.probe(res["path"])["duration"] - 6.0) < 1.5, res
+    # 한 영상 안의 구간 합치기(내보내기 '하나로 합치기' 빠르게)도 같은 함수를 쓴다
+    out = tmp_path / "merge.mp4"
+    ft.Cutter().concat([(str(a), 1.0, 3.0), (str(a), 5.0, 7.0)], str(out), lambda p: None, 4.0)
+    assert 3.5 < ft.probe(str(out))["duration"] < 6.1   # 복사라 키프레임(1초 간격)만큼 늘 수 있음, 예전엔 0초
 
 
 @needs_ffmpeg

@@ -80,16 +80,26 @@ class JoinWorker(QThread):
             if plan == "copy":
                 try:
                     self.progress.emit(0.0, tr("이어 붙이는 중… (재인코딩 없음)"))
-                    entries = [(it["path"], a, b) for it in self.items for a, b in it["parts"]]
+                    # 전체를 넣는 영상은 파일 그대로 (구간 지정 없이), 구간만 넣는 영상은 (파일, 시작, 끝)
+                    entries = [it["path"] if self._whole(it) else (it["path"], a, b)
+                               for it in self.items for a, b in it["parts"]]
                     cutter.concat(entries, self.dst, lambda p: self.progress.emit(p, tr("이어 붙이는 중…")),
                                   total, normalize=self.normalize)
-                    self.done.emit(self.dst, "")
-                    return
+                    got = ffmpeg_tools.probe(self.dst)["duration"]
+                    if abs(got - total) <= max(2.0, total * 0.005):   # 결과 길이가 맞아야 성공
+                        self.done.emit(self.dst, "")
+                        return
+                    LOG.warning("이어 붙인 길이가 다름 (%.1f초, 예상 %.1f초) → 재인코딩으로 다시", got, total)
+                    self.progress.emit(0.0, tr("길이가 맞지 않아 재인코딩으로 다시 합니다…"))
                 except Cancelled:
                     raise
                 except Exception as ex:   # 복사로 안 되는 조합이면 재인코딩으로 다시
                     LOG.warning("이어 붙이기 복사 실패 → 재인코딩으로 다시: %s", ex)
             self._render(cutter, total)
+            got = ffmpeg_tools.probe(self.dst)["duration"]
+            if abs(got - total) > max(3.0, total * 0.01):
+                raise RuntimeError(tr("이어 붙인 결과 길이가 맞지 않습니다 ({0} / 예상 {1})").format(
+                    fmt_time(got, ms=False), fmt_time(total, ms=False)))
             self.done.emit(self.dst, "")
         except Cancelled:
             self._remove(self.dst)

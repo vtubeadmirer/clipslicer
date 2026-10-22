@@ -39,14 +39,18 @@ def probe(path: str) -> dict:
     cmd = [
         find_tool("ffprobe"), "-v", "error", "-print_format", "json",
         "-show_entries",
-        "format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,avg_frame_rate,pix_fmt,profile",
+        "format=duration,start_time:stream=codec_type,codec_name,width,height,r_frame_rate,avg_frame_rate,pix_fmt,profile",
         path,
     ]
     out = _run(cmd)
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip() or tr("ffprobe 실패"))
     data = json.loads(out.stdout)
-    info = {"duration": float(data.get("format", {}).get("duration", 0) or 0),
+    try:   # 시간 기록이 0 이 아닌 곳에서 시작하는 파일 (녹화 · 다운로더에 따라 수백 초)
+        start_time = float(data.get("format", {}).get("start_time", 0) or 0)
+    except (TypeError, ValueError):
+        start_time = 0.0
+    info = {"duration": float(data.get("format", {}).get("duration", 0) or 0), "start_time": start_time,
             "width": 0, "height": 0, "fps": 30.0, "has_audio": False,
             "vcodec": "", "acodec": "", "pix_fmt": "", "profile": ""}
     for s in data.get("streams", []):
@@ -746,10 +750,19 @@ class Cutter:
         lst = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
         try:
             est = 0.0
+            offsets: dict[str, float] = {}
             for p in parts:
                 if isinstance(p, tuple):
                     path, a, b = p
-                    lst.write(f"file '{_concat_escape(path)}'\ninpoint {a:.3f}\noutpoint {b:.3f}\n")
+                    # concat 의 inpoint/outpoint 는 파일 안의 시간 기록 기준이다. 시간이 0 이 아닌 곳에서 시작하는 파일은
+                    # 그만큼 밀어 줘야 한다 (안 그러면 끝이 잘리거나 통째로 빠짐 — 0.9.18 이어 붙이기)
+                    if path not in offsets:
+                        try:
+                            offsets[path] = float(probe(path).get("start_time") or 0.0)
+                        except Exception:
+                            offsets[path] = 0.0
+                    off = offsets[path]
+                    lst.write(f"file '{_concat_escape(path)}'\ninpoint {a + off:.3f}\noutpoint {b + off:.3f}\n")
                     est += b - a
                 else:
                     lst.write(f"file '{_concat_escape(p)}'\n")

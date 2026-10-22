@@ -840,4 +840,6 @@ EN = {
     '여러 영상(또는 그 안의 켜진 구간)을 순서대로 하나로 합칩니다': 'Join several videos (or their enabled segments) into one, in order',
     '이어 붙이기 완료': 'Join finished',
     '이어 붙인 영상: {0}': 'Joined video: {0}',
+    '길이가 맞지 않아 재인코딩으로 다시 합니다…': "The length didn't match, joining again with re-encoding…",
+    '이어 붙인 결과 길이가 맞지 않습니다 ({0} / 예상 {1})': 'The joined video has the wrong length ({0} / expected {1})',
 }
