@@ -22,8 +22,9 @@ import urllib.request
 import zipfile
 
 # 고정 버전. 올릴 때는 두 값을 같이 바꾸고 integration 테스트를 돌린다.
-TAG = "autobuild-2026-10-12-13-12"
-ASSET = "ffmpeg-n8.1.3-18-g46d899d7a0-win64-gpl-shared-8.1.zip"
+# BtbN 은 최근 약 2주 치와 매달 말일 빌드만 남기므로 말일 빌드를 고를 것 (다른 날 빌드는 지워져 릴리즈 빌드가 실패한다).
+TAG = "autobuild-2026-10-31-12-59"
+ASSET = "ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-shared-8.1.zip"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST = os.path.join(ROOT, "bin", "ffmpeg")
 
