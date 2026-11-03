@@ -256,16 +256,16 @@ You can request a higher quota in Google Cloud Console. Custom thumbnails need a
 <p>These features shorten the path from a VOD to finished clips: bookmark moments while streaming, find highlights from chat and audio reactions,
 add captions and a watermark, export as Shorts and send the result to YouTube or Discord, all in one program.</p>
 
-<h2>Record from site (streams that need a login)</h2>
-<p><b>File ▸ Record from site</b> (<kbd>Ctrl+Alt+L</kbd>). Streams whose page URL yt-dlp does not support, or that need a login (such as rplay),
-open in a small browser inside ClipSlicer. Sign in there once and it is remembered; as soon as the broadcast plays, the stream URL and login cookies
-are detected and <b>● Start recording</b> lights up. <b>■ Stop recording</b> saves what was recorded as mp4 and opens it for editing.
-Pasting an rplay page URL into Open from URL, or pressing <b>🌐 Open in browser and record</b>, opens the same window.</p>
+<h2>Vimeo</h2>
+<p>Paste a <code>vimeo.com/ID</code> address into <b>Open from URL</b> and it changes automatically to <code>player.vimeo.com/video/ID</code>, which opens without a login.
+DRM-protected, private, password-protected or paid videos, and videos whose player address is also blocked, can't be downloaded. If you are allowed to watch one, play it in your browser and try sending it with the extension below.</p>
+
+<h2>Download from an m3u8 URL</h2>
 <p>If you already have the m3u8 URL you can paste it into <b>Open from URL</b> (login cookies: Firefox or cookies.txt; Referer filled automatically).
 DRM-protected streams cannot be downloaded. Use it to archive your own streams or streams you have permission for.</p>
 
 <h2>Browser extension link (Chrome, Edge, Whale)</h2>
-<p>When Google sign-in is blocked in the built-in browser (Google blocks sign-in inside apps) or a site can't be downloaded from its address,
+<p>When a site needs a login or can't be downloaded from its address (such as rplay),
 play it in <b>your everyday browser</b> and send it with the <b>ClipSlicer 연결</b> extension. It reuses that browser's login and request details,
 so members-only or age-restricted streams you can watch can also be saved.</p>
 <p><b>Install (once)</b>: <b>File ▸ Browser extension link…</b> → <b>Open extension folder</b>. Type <code>chrome://extensions</code>

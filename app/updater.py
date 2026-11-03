@@ -394,6 +394,15 @@ def remove_backup(app_dir: str | None = None) -> int:
     return size
 
 
+def remove_web_profile() -> None:
+    """0.9.19 까지 있던 내장 브라우저의 프로필(로그인 쿠키 · 캐시)을 지운다. 이제 읽는 곳이 없다."""
+    from .youtube import config_dir
+    d = os.path.join(config_dir(), "web_profile")
+    if os.path.isdir(d):
+        shutil.rmtree(d, ignore_errors=True)
+        LOG.info("내장 브라우저 프로필 삭제: %s", d)
+
+
 def update_in_progress(app_dir: str | None = None, max_age: float = 600.0) -> bool:
     """교체 스크립트가 지금 이 폴더를 바꾸는 중인가 (잠금 파일이 있고 10분이 안 지남)."""
     p = os.path.join(app_dir or base_dir(), LOCK_NAME)

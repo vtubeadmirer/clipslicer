@@ -287,7 +287,6 @@ class CropDialog(QDialog):
 
 class DownloadDialog(QDialog):
     """URL 에서 영상 받기 (yt-dlp) 입력 양식. 받기를 누르면 .params 에 담고 닫힌다 → 녹화·다운로드 목록에서 받는다."""
-    siteRequested = Signal(str)  # 페이지 주소를 내장 브라우저로 열어 달라는 요청
 
     def __init__(self, parent, default_dir: str, last_quality: str = "best",
                  last_cookies: str = "", last_referer: str = ""):
@@ -297,12 +296,13 @@ class DownloadDialog(QDialog):
         self.params: dict | None = None
         lay = QVBoxLayout(self)
         lay.addWidget(QLabel(tr("유튜브 · 치지직 · 트위치 VOD · 아프리카 등 yt-dlp 가 지원하는 주소를 붙여넣으세요.")))
-        tip = QLabel(tr("rplay 처럼 페이지 주소를 지원하지 않는 곳은 방송의 m3u8 주소를 넣으면 됩니다. 라이브면 녹화합니다."))
+        tip = QLabel(tr("rplay 처럼 페이지 주소를 지원하지 않는 곳은 브라우저 확장 'ClipSlicer 연결' 로 보내거나 방송의 m3u8 주소를 넣으세요. 라이브면 녹화합니다."))
         tip.setWordWrap(True)
         tip.setStyleSheet("color:#9aa0a6; font-size:11px;")
         lay.addWidget(tip)
         self.ed_url = QLineEdit()
         self.ed_url.setPlaceholderText("https://www.youtube.com/watch?v=…")
+        self.ed_url.textEdited.connect(self._on_url_edited)
         lay.addWidget(self.ed_url)
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("화질")))
@@ -370,10 +370,6 @@ class DownloadDialog(QDialog):
         note.setWordWrap(True)
         lay.addWidget(note)
         btns = QHBoxLayout()
-        self.b_site = QPushButton(tr("🌐 브라우저로 열어 녹화"))
-        self.b_site.setToolTip(tr("로그인이 필요하거나 페이지 주소를 지원하지 않는 방송(rplay 등)은 내장 브라우저로 열어 녹화합니다"))
-        self.b_site.clicked.connect(lambda: self.siteRequested.emit(self.ed_url.text().strip()))
-        btns.addWidget(self.b_site)
         btns.addStretch(1)
         self.b_start = QPushButton(tr("받기"))
         self.b_start.setDefault(True)
@@ -383,6 +379,14 @@ class DownloadDialog(QDialog):
         btns.addWidget(self.b_start)
         btns.addWidget(self.b_cancel)
         lay.addLayout(btns)
+
+    def _on_url_edited(self, text: str):
+        """vimeo.com 주소를 붙여넣으면 로그인 없이 열리는 플레이어 주소로 바꿔 보여 준다 (로그인 쿠키를 고른 경우는 그대로)."""
+        from .live_record import vimeo_player_url
+        url = text.strip()
+        new = vimeo_player_url(url)
+        if new != url and not self.cookies:
+            self.ed_url.setText(new)
 
     def _on_cookie_choice(self, _i: int):
         if self.cb_cookies.currentData() == "file":
@@ -418,8 +422,9 @@ class DownloadDialog(QDialog):
     def _start(self):
         url = self.ed_url.text().strip()
         from .live_record import unsupported_page
-        if url and unsupported_page(url):  # rplay 페이지 주소 → 내장 브라우저로 바로
-            self.siteRequested.emit(url)
+        msg = unsupported_page(url) if url else ""
+        if msg:  # rplay 페이지 주소 → 브라우저 확장 안내
+            QMessageBox.information(self, "URL", msg)
             return
         if not url.lower().startswith(("http://", "https://")):
             QMessageBox.warning(self, "URL", tr("http:// 또는 https:// 로 시작하는 주소를 넣어 주세요."))

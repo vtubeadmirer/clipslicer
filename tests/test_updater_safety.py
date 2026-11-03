@@ -205,6 +205,17 @@ def test_remove_backup_only_touches_backup(tmp_path):
     assert updater.remove_backup(str(app)) == 0          # 두 번째는 할 일 없음
 
 
+def test_remove_web_profile_only_touches_profile(tmp_path, monkeypatch):
+    from app import youtube
+    monkeypatch.setattr(youtube, "config_dir", lambda: str(tmp_path))
+    (tmp_path / "web_profile" / "cache").mkdir(parents=True)
+    (tmp_path / "web_profile" / "Cookies").write_bytes(b"LOGIN")
+    (tmp_path / "youtube_token.bin").write_bytes(b"TOKEN")
+    updater.remove_web_profile()
+    assert not (tmp_path / "web_profile").exists() and (tmp_path / "youtube_token.bin").exists()
+    updater.remove_web_profile()   # 없으면 할 일 없음
+
+
 def test_restore_user_data_from_backup(tmp_path):
     """0.9.4 이하 교체 스크립트가 지운 사용자 데이터를 0.9.5 첫 실행에서 되살린다 (기존 파일은 덮어쓰지 않음)."""
     app = tmp_path / "app"

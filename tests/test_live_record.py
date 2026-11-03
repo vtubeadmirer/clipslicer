@@ -42,6 +42,103 @@ def test_url_helpers():
     assert lr.ytdlp_cookie_opts("C:/x/cookies.txt") == {"cookiefile": "C:/x/cookies.txt"}
 
 
+def test_vimeo_player_url():
+    p = "https://player.vimeo.com/video/76979871"
+    for u in ("https://vimeo.com/76979871", "https://www.vimeo.com/76979871/", "http://vimeo.com/76979871?share=copy",
+              "https://vimeo.com/channels/staffpicks/76979871", "https://vimeo.com/groups/x/videos/76979871",
+              "https://vimeo.com/album/5/video/76979871", "https://vimeo.com/showcase/5/video/76979871",
+              "https://vimeo.com/manage/videos/76979871"):
+        assert lr.vimeo_player_url(u) == p, u
+    assert lr.vimeo_player_url("https://vimeo.com/76979871/ab12cd34ef") == p + "?h=ab12cd34ef"   # 일부 공개
+    assert lr.vimeo_player_url("https://vimeo.com/76979871?h=ab12") == p + "?h=ab12"
+    for u in (p, p + "?h=ab12", "https://vimeo.com/showcase/5", "https://vimeo.com/album/5", "https://vimeo.com/someuser",
+              "https://vimeo.com/channels/staffpicks", "https://notvimeo.com/123", "https://www.youtube.com/watch?v=x", "vimeo.com/123", ""):
+        assert lr.vimeo_player_url(u) == u, u
+
+
+def _run_vimeo_worker(tmp_path, url, cookies, fake):
+    """받기 부분만 fake 로 바꿔 worker 를 돌린다. (받은 파일, 오류)"""
+    from PySide6.QtWidgets import QApplication
+    from app.workers import DownloadWorker
+    _app = QApplication.instance() or QApplication([])
+    w = DownloadWorker(url, str(tmp_path), cookies=cookies)
+    w._download_full = lambda _y, _h: fake(w.url)
+    res = {}
+    w.done.connect(lambda p, e: res.update(path=p, err=e))
+    w.run()
+    return res
+
+
+def test_worker_uses_vimeo_player_url(tmp_path):
+    import yt_dlp
+    f = tmp_path / "v.mp4"
+    f.write_bytes(b"x")
+    seen = []
+
+    def ok(u):
+        seen.append(u)
+        return str(f)
+
+    # 쿠키 없음: 처음부터 플레이어 주소
+    assert _run_vimeo_worker(tmp_path, "https://vimeo.com/123", "", ok)["path"] == str(f)
+    assert seen == ["https://player.vimeo.com/video/123"]
+
+    # 쿠키 있음: vimeo.com 먼저, 로그인 오류면 플레이어 주소로 다시
+    seen.clear()
+
+    def needs_login(u):
+        seen.append(u)
+        if "player." not in u:
+            raise yt_dlp.utils.DownloadError("ERROR: The web client only works when logged-in.")
+        return str(f)
+
+    assert _run_vimeo_worker(tmp_path, "https://vimeo.com/123", "firefox", needs_login)["path"] == str(f)
+    assert seen == ["https://vimeo.com/123", "https://player.vimeo.com/video/123"]
+
+    # 다른 오류는 다시 시도하지 않는다
+    seen.clear()
+
+    def broken(u):
+        seen.append(u)
+        raise yt_dlp.utils.DownloadError("ERROR: HTTP Error 404")
+
+    assert "404" in _run_vimeo_worker(tmp_path, "https://vimeo.com/123", "firefox", broken)["err"]
+    assert len(seen) == 1
+
+    # DRM 은 우회하지 않고 알아보기 쉽게 알린다
+    def drm(_u):
+        raise yt_dlp.utils.DownloadError("ERROR: This format is DRM protected; Try selecting another format")
+
+    assert "DRM" in _run_vimeo_worker(tmp_path, "https://vimeo.com/123", "", drm)["err"]
+    assert "Try selecting" not in _run_vimeo_worker(tmp_path, "https://vimeo.com/123", "", drm)["err"]
+
+
+def test_dialog_rewrites_pasted_vimeo_url(tmp_path):
+    from PySide6.QtWidgets import QApplication
+    from app.dialogs import DownloadDialog
+    _app = QApplication.instance() or QApplication([])
+    d = DownloadDialog(None, str(tmp_path))
+    d.ed_url.textEdited.emit("  https://vimeo.com/76979871?share=copy ")
+    assert d.ed_url.text() == "https://player.vimeo.com/video/76979871"
+    d.ed_url.setText("https://www.youtube.com/watch?v=x")
+    d.ed_url.textEdited.emit(d.ed_url.text())
+    assert d.ed_url.text() == "https://www.youtube.com/watch?v=x"
+    # 로그인 쿠키를 고르면 로그인이 필요한 영상일 수 있으니 그대로 둔다
+    d.cb_cookies.setCurrentIndex(d.cb_cookies.findData("firefox"))
+    d.ed_url.setText("https://vimeo.com/76979871")
+    d.ed_url.textEdited.emit(d.ed_url.text())
+    assert d.ed_url.text() == "https://vimeo.com/76979871"
+
+
+def test_write_cookies_txt_is_readable_by_ytdlp(tmp_path):
+    p = lr.write_cookies_txt([{"domain": ".rplay.live", "path": "/", "secure": True, "expiry": 2147483647, "name": "tok", "value": "abc"},
+                              {"domain": "media.rplay.live", "path": "/", "secure": False, "expiry": 0, "name": "s", "value": "1"}],
+                             str(tmp_path / "c.txt"))
+    hdr = lr.cookie_header(p, "https://media.rplay.live/live/master.m3u8")
+    assert "tok=abc" in hdr and "s=1" in hdr
+    assert lr.cookie_header(p, "https://other.example/x.m3u8") == ""
+
+
 def test_playlist_helpers():
     base = "https://cdn.x/live/master.m3u8"
     assert lr.is_master(MASTER)

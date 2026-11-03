@@ -35,7 +35,7 @@ def test_selftest_from_source(tmp_path):
     r = subprocess.run([sys.executable, os.path.join(ROOT, "main.py"), "--selftest", str(out)],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120, env=env)
     rep = json.loads(out.read_text(encoding="utf-8"))
-    assert set(rep["checks"]) == {"ffmpeg", "ffprobe", "libmpv", "webengine", "bridge", "updater", "settings", "extension"}
+    assert set(rep["checks"]) == {"ffmpeg", "ffprobe", "libmpv", "bridge", "updater", "settings", "extension"}
     failed = {k: v for k, v in rep["checks"].items() if not v["ok"]}
     assert r.returncode == (0 if not failed else 1)
     # ffmpeg/libmpv 가 없는 환경(CI 의 소스 테스트)에서는 그 둘만 실패할 수 있다

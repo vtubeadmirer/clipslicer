@@ -43,15 +43,6 @@ def _mpv() -> str:
     return d
 
 
-def _webengine() -> str:
-    from PySide6.QtWebEngineCore import QWebEngineProfile  # noqa: F401
-    from .paths import base_dir
-    exe = os.path.join(getattr(sys, "_MEIPASS", base_dir()), "PySide6", "QtWebEngineProcess.exe")
-    if getattr(sys, "frozen", False) and not os.path.isfile(exe):
-        raise FileNotFoundError(exe)
-    return "QtWebEngine ok"
-
-
 def _bridge() -> str:
     import socket
     import urllib.request
@@ -99,7 +90,6 @@ def run(out_path: str) -> int:
     _check(results, "ffmpeg", lambda: _tool_version("ffmpeg"))
     _check(results, "ffprobe", lambda: _tool_version("ffprobe"))
     _check(results, "libmpv", _mpv)
-    _check(results, "webengine", _webengine)
     _check(results, "bridge", _bridge)
     _check(results, "updater", _updater)
     _check(results, "settings", _settings)

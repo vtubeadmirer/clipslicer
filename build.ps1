@@ -23,7 +23,6 @@ $ErrorActionPreference = "Continue"
   --collect-submodules yt_dlp `
   --exclude-module PIL --exclude-module numpy --exclude-module tkinter `
   --exclude-module yaml --exclude-module psutil `
-  --hidden-import PySide6.QtWebEngineWidgets --hidden-import PySide6.QtWebEngineCore `
   --exclude-module PySide6.QtPdf --exclude-module PySide6.QtQuick3D `
   main.py 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw "pyinstaller 실패 (exit $LASTEXITCODE)" }
@@ -33,22 +32,15 @@ $ErrorActionPreference = "Stop"
 $internal = Join-Path (Resolve-Path $app) "_internal"
 $qt = Join-Path $internal "PySide6"
 # Qt 모듈은 화이트리스트만 남긴다 (PyInstaller 가 QtQuick 계열을 통째로 끌고 온다).
-# 내장 브라우저(QtWebEngine)는 Network/Qml/Quick/WebChannel/Positioning/OpenGL 을 필요로 한다.
-$keepDll = @("Qt6Core", "Qt6Gui", "Qt6Widgets", "Qt6Network", "Qt6OpenGL", "Qt6OpenGLWidgets", "Qt6Svg",
-             "Qt6Qml", "Qt6QmlModels", "Qt6QmlMeta", "Qt6QmlWorkerScript", "Qt6Quick", "Qt6QuickWidgets",
-             "Qt6WebChannel", "Qt6WebEngineCore", "Qt6WebEngineWidgets", "Qt6Positioning", "Qt6PrintSupport")
+# 앱은 QtCore/QtGui/QtWidgets 만 쓴다 (Svg 는 아이콘 · 이미지 플러그인용). 재생은 mpv 가 자기 창에 그린다.
+$keepDll = @("Qt6Core", "Qt6Gui", "Qt6Widgets", "Qt6Svg")
 Get-ChildItem $qt -Filter "Qt6*.dll" | Where-Object { $keepDll -notcontains $_.BaseName } | Remove-Item -Force
-$keepPyd = @("QtCore", "QtGui", "QtWidgets", "QtNetwork", "QtWebEngineCore", "QtWebEngineWidgets", "QtWebChannel",
-             "QtPrintSupport", "QtOpenGL", "QtOpenGLWidgets", "QtPositioning")
+$keepPyd = @("QtCore", "QtGui", "QtWidgets")
 Get-ChildItem $qt -Filter "Qt*.pyd" | Where-Object { $keepPyd -notcontains $_.BaseName } | Remove-Item -Force
-# 웹엔진 리소스: 디버그·개발자 도구 팩 제거, 로캘은 한국어·영어·일본어만
-Get-ChildItem (Join-Path $qt "resources") -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -like "*.debug.*" -or $_.Name -like "*devtools*" } | Remove-Item -Force
-Get-ChildItem (Join-Path $qt "translations\qtwebengine_locales") -Filter "*.pak" -ErrorAction SilentlyContinue |
-  Where-Object { @("ko.pak", "en-US.pak", "ja.pak") -notcontains $_.Name } | Remove-Item -Force
-$dirs = @("PySide6/qml", "PySide6/plugins/virtualkeyboard", "PySide6/plugins/qmltooling", "numpy", "numpy.libs", "PIL", "yaml", "psutil")
-# 번역 파일은 웹엔진 로캘(qtwebengine_locales)만 남긴다
-Get-ChildItem (Join-Path $qt "translations") -Filter "*.qm" -ErrorAction SilentlyContinue | Remove-Item -Force
+$dirs = @("PySide6/qml", "PySide6/resources", "PySide6/translations", "PySide6/plugins/virtualkeyboard", "PySide6/plugins/qmltooling",
+          "PySide6/plugins/tls", "PySide6/plugins/networkinformation", "numpy", "numpy.libs", "PIL", "yaml", "psutil")
+# QOpenGLWidget 을 쓰지 않으므로 Qt 의 소프트웨어 OpenGL 도 필요 없다
+Remove-Item (Join-Path $qt "opengl32sw.dll") -Force -ErrorAction SilentlyContinue
 foreach ($d in $dirs) {
   $full = Join-Path $internal $d
   if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force }
@@ -76,7 +68,7 @@ foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
   if ($code -ne 0) { throw "번들 $exe 실행 실패 (DLL 누락?): $first" }
   Write-Host "검증 OK: $first"
 }
-if (-not (Test-Path (Join-Path $internal "PySide6\QtWebEngineProcess.exe"))) { throw "QtWebEngineProcess.exe 가 번들되지 않았습니다 (내장 브라우저)" }
+if (Test-Path (Join-Path $internal "PySide6\Qt6WebEngineCore.dll")) { throw "쓰지 않는 QtWebEngine 이 번들되었습니다" }
 # 브라우저 확장 'ClipSlicer 연결': 사용자가 '압축해제된 확장 프로그램 로드' 로 고를 폴더 (exe 옆)
 Copy-Item browser_extension (Join-Path $app "browser_extension") -Recurse -Force
 if (-not (Test-Path (Join-Path $app "browser_extension\manifest.json"))) { throw "browser_extension 이 복사되지 않았습니다" }

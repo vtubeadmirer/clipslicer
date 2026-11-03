@@ -551,11 +551,6 @@ class MainWindow(QMainWindow):
         a.setShortcut("Ctrl+L")
         a.triggered.connect(self.open_url)
         m_file.addAction(a)
-        a = QAction(tr("사이트에서 녹화… (내장 브라우저)"), self)
-        a.setShortcut("Ctrl+Alt+L")
-        a.setToolTip(tr("rplay 처럼 로그인이 필요한 방송 페이지를 열고, 재생되면 버튼 한 번으로 녹화합니다"))
-        a.triggered.connect(lambda: self.open_site_recorder())
-        m_file.addAction(a)
         a = QAction(tr("영상 이어 붙이기…"), self)
         a.setShortcut("Ctrl+Shift+J")
         a.setToolTip(tr("여러 영상(또는 그 안의 켜진 구간)을 순서대로 하나로 합칩니다"))
@@ -1883,43 +1878,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("디스코드 전송 완료: 성공 {0}, 실패 {1}").format(ok, fail), 6000)
 
     # ---- URL 다운로드 ----
-    def open_site_recorder(self, url: str = ""):
-        """내장 브라우저로 방송 페이지를 열고 스트림을 잡아 녹화한다 (창은 하나만)."""
-        try:
-            from .sitebrowser import SiteRecordWindow
-        except ImportError as ex:
-            QMessageBox.warning(self, tr("사이트에서 녹화"), tr("내장 브라우저를 불러오지 못했습니다: {0}").format(ex))
-            return
-        w = getattr(self, "site_window", None)
-        if w is None or not w.isVisible():
-            w = SiteRecordWindow(self, self.settings, url)
-            w.fileReady.connect(self._on_site_file)
-            w.setAttribute(Qt.WA_DeleteOnClose)
-            w.destroyed.connect(lambda *_: setattr(self, "site_window", None))
-            self.site_window = w
-        elif url:
-            w.ed_url.setText(url)
-            w._go()
-        w.show()
-        w.raise_()
-        w.activateWindow()
-
-    def _on_site_file(self, path: str, page: str):
-        self.add_files([path], self.act_recent_dl.isChecked())
-        self.notifier.notify(tr("녹화 저장 완료"), os.path.basename(path))
-        proj = self.projects.get(os.path.abspath(path))
-        if proj and not proj.source_url:
-            proj.source_url = page
-            proj.dirty = True
-            self._schedule_save()
-
     def open_url(self, *_args):
         """URL 에서 받기: 주소 · 화질 · 쿠키를 입력받아 녹화 · 다운로드 목록에 넘긴다 (여러 개 동시에)."""
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
         d = DownloadDialog(self, default_dir, self.settings.value("dl_quality", "best"),
                            self.settings.value("dl_cookies", "") or "", self.settings.value("dl_referer", "") or "")
-        d.siteRequested.connect(lambda u: (d.reject(), QTimer.singleShot(0, lambda: self.open_site_recorder(u))))
         accepted = d.exec()
         self.settings.setValue("dl_cookies", d.cookies)
         self.settings.setValue("dl_referer", d.referer)
@@ -2058,7 +2022,7 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle(tr("브라우저 확장 연결"))
         box.setText(tr("평소 쓰는 브라우저(크롬 · 엣지 · 웨일)에서 재생 중인 방송·영상을 그 브라우저의 로그인 그대로 "
-                       "ClipSlicer 로 보내 녹화/다운로드합니다. 내장 브라우저에서 구글 로그인이 막히는 사이트도 됩니다."))
+                       "ClipSlicer 로 보내 녹화/다운로드합니다. 구글 로그인을 쓰는 사이트도 됩니다."))
         box.setInformativeText(tr(
             "설치 (한 번만):\n"
             "1. 브라우저 주소창에 chrome://extensions (엣지: edge://extensions) 입력\n"

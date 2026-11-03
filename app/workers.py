@@ -204,12 +204,18 @@ class DownloadWorker(QThread):
             msg = "" if self.stream else live_record.unsupported_page(self.url)
             if msg:
                 raise live_record.LiveError(msg)
-            if (self.stream or live_record.is_m3u8(self.url)) and not self.section:
-                path = self._download_m3u8(yt_dlp, hook)
-            elif self.section:
-                path = self._download_section(yt_dlp, hook)
-            else:
-                path = self._download_full(yt_dlp, hook)
+            if not self.cookies and not self.headers:
+                self.url = live_record.vimeo_player_url(self.url)
+            try:
+                path = self._fetch(yt_dlp, hook)
+            except yt_dlp.utils.DownloadError as ex:
+                # 쿠키가 있어도 로그인 상태가 아니면 vimeo.com 주소는 거절된다 → 플레이어 주소로 한 번 더
+                alt = live_record.vimeo_player_url(self.url)
+                if alt == self.url or "logged-in" not in str(ex):
+                    raise
+                LOG.info("Vimeo 로그인 필요 → 플레이어 주소로 다시: %s", alt)
+                self.url = alt
+                path = self._fetch(yt_dlp, hook)
             if path and os.path.exists(path):
                 self.progress.emit(1.0, tr("완료"))
                 self.done.emit(path, "")
@@ -221,9 +227,19 @@ class DownloadWorker(QThread):
             else:
                 LOG.exception("다운로드 실패: %s", self.url)
                 msg = str(ex)
-                if "ERROR:" in msg:
+                if "DRM protected" in msg:
+                    msg = tr("이 영상은 DRM 으로 보호되어 있어 받을 수 없습니다.")
+                elif "ERROR:" in msg:
                     msg = msg.split("ERROR:", 1)[1].strip()
                 self.done.emit("", msg[:400])
+
+    def _fetch(self, yt_dlp, hook) -> str:
+        from . import live_record
+        if (self.stream or live_record.is_m3u8(self.url)) and not self.section:
+            return self._download_m3u8(yt_dlp, hook)
+        if self.section:
+            return self._download_section(yt_dlp, hook)
+        return self._download_full(yt_dlp, hook)
 
     # ---- m3u8 주소 직접 (라이브면 녹화) ----
     def _download_m3u8(self, yt_dlp, hook) -> str:

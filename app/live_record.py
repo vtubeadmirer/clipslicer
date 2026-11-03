@@ -30,6 +30,9 @@ REFERER_HINTS = {"rplay": "https://rplay.live/"}
 # ffmpeg 8 의 HLS 입력은 조각 확장자가 형식과 맞는지 엄격히 본다 → 치지직 라이브(fMP4 조각이 .m4v)가
 # 'Invalid data' 로 열리지 않는다. HLS 입력에만 붙일 것 (다른 입력에 주면 'Option not found' 로 실패).
 HLS_INPUT_ARGS = ["-extension_picky", "0"]
+# vimeo.com/123 · /123/해시 · /channels/x/123 · /groups/x/videos/123 · /album/x/video/123 · /showcase/x/video/123 · /manage/videos/123
+VIMEO_PATH = re.compile(r"^/(?:(?:channels/[^/]+|groups/[^/]+/videos|(?:album|showcase)/[^/]+/video|manage/videos)/)?"
+                        r"(?P<id>\d+)(?:/(?P<hash>[0-9a-zA-Z]+))?/?$")
 
 
 class LiveError(Exception):
@@ -57,6 +60,19 @@ def unsupported_page(url: str) -> str:
         return tr("rplay 는 페이지 주소로는 받을 수 없습니다. 크롬에서 방송을 재생한 뒤 'ClipSlicer 연결' 확장 목록에서 "
                   "'녹화/받기' 를 누르세요 (성인 · 멤버십 방송은 로그인 · 인증 후 영상이 재생돼야 목록에 뜹니다).")
     return ""
+
+
+def vimeo_player_url(url: str) -> str:
+    """vimeo.com 영상 주소 → player.vimeo.com/video/ID (일부 공개 주소는 ?h=). 다른 주소는 그대로.
+    yt-dlp 는 vimeo.com 주소에 로그인을 요구하지만 플레이어 주소는 공개 영상이면 로그인 없이 열린다."""
+    p = urllib.parse.urlparse(url)
+    if p.scheme not in ("http", "https") or p.netloc.lower() not in ("vimeo.com", "www.vimeo.com"):
+        return url
+    m = VIMEO_PATH.match(p.path)
+    if not m:
+        return url
+    h = m.group("hash") or urllib.parse.parse_qs(p.query).get("h", [""])[0]
+    return f"https://player.vimeo.com/video/{m.group('id')}" + (f"?h={urllib.parse.quote(h)}" if h else "")
 
 
 def origin_of(referer: str) -> str:

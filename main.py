@@ -4,7 +4,7 @@ import os
 import sys
 import traceback
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QColor, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -51,7 +51,6 @@ def main():
         from app import selftest
         return selftest.run(sys.argv[i + 1] if i + 1 < len(sys.argv) else os.path.join(base_dir(), "selftest.json"))
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)  # 내장 브라우저(QtWebEngine)가 나중에 뜰 수 있게
     app = QApplication(sys.argv)
     app.setApplicationName("ClipSlicer")
     app.setWindowIcon(app_icon())
@@ -70,6 +69,7 @@ def main():
     # 지금 버전이 정상으로 켜졌으니 이전 버전 사본(_backup, 약 650 MB)은 필요 없다 — 시작을 늦추지 않게 뒤에서 지운다
     import threading
     threading.Thread(target=updater.remove_backup, name="remove-backup").start()
+    threading.Thread(target=updater.remove_web_profile, name="remove-web-profile").start()
 
     missing = missing_tools()
     if missing:
@@ -94,10 +94,6 @@ def main():
         return 1
     install_error_dialog(win)
     win.show()
-    if "--site" in sys.argv:  # ClipSlicer.exe --site <방송 페이지 주소> : 사이트에서 녹화 창으로 바로
-        i = sys.argv.index("--site")
-        url = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
-        QTimer.singleShot(300, lambda: win.open_site_recorder(url))
     files = [a for a in sys.argv[1:] if os.path.exists(a)]
     if files:
         win.add_files(files)
