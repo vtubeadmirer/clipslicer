@@ -277,6 +277,7 @@ For sites with address support such as YouTube or Chzzk, <b>이 페이지 주소
 DRM-protected videos can't be downloaded. Use it to archive your own streams or streams you have permission to keep.</div>
 
 <h2>Recordings &amp; downloads (record several at once)</h2>
+<p><b>Paste an address into the box at the top of the window and press Enter</b> to download right away without closing it (several addresses at once are fine; <b>More…</b> sets the section, folder and cookies).</p>
 <p><b>File ▸ Recordings &amp; downloads…</b> (<kbd>Ctrl+J</kbd>). Streams sent from the browser extension and videos from <b>Open from URL</b> each get a row here
 and <b>run at the same time</b>. Stop each live recording with its own <b>■ Stop recording (save)</b>; when done, use <b>Open in editor</b> or <b>Folder</b>.
 If you are editing a video, finished files are only added to the file list so your editor view is not taken over. Sending the same stream twice is blocked.</p>

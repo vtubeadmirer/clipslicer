@@ -16,9 +16,77 @@ from app.paths import find_tool  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def test_url_box_adds_rows_without_closing(tmp_path):
+    from PySide6.QtCore import QObject, Signal
+    from PySide6.QtWidgets import QApplication
+    from app.downloads import DownloadsWindow
+    _app = QApplication.instance() or QApplication([])
+
+    class Fake(QObject):
+        progress = Signal(float, str)
+        done = Signal(str, str)
+        liveStarted = Signal()
+
+        def start(self):
+            pass
+
+    class Settings(dict):
+        def value(self, k, d=None):
+            return self.get(k, d)
+
+        def setValue(self, k, v):
+            self[k] = v
+
+    s = Settings(dl_dir=str(tmp_path), dl_quality="720", dl_cookies="firefox")
+    got = []
+    w = DownloadsWindow(worker_factory=lambda p: (got.append(p), Fake())[1], settings=s)
+    assert w.cb_quality.currentData() == "720"
+
+    # 여러 개를 한 번에: 한 줄씩 추가되고 입력칸은 비워져 바로 다음 주소를 넣을 수 있다
+    w.ed_url.setText("https://youtu.be/a  https://www.youtube.com/watch?v=b")
+    w.add_from_input()
+    w.ed_url.setText("https://www.youtube.com/watch?v=c")
+    w.add_from_input()
+    assert [p["url"] for p in got] == ["https://youtu.be/a", "https://www.youtube.com/watch?v=b", "https://www.youtube.com/watch?v=c"]
+    assert w.ed_url.text() == "" and w.lbl_input.isHidden()
+    p = got[0]
+    assert p["out_dir"] == str(tmp_path) and p["quality"] == "720" and p["cookies"] == "firefox" and p["page"] == p["url"]
+
+    # 같은 주소: 다시 시작하지 않고 알린다
+    w.ed_url.setText("https://youtu.be/a")
+    w.add_from_input()
+    assert len(w.rows) == 3 and w.ed_url.text() == "" and not w.lbl_input.isHidden()
+
+    # 받을 수 없는 주소만 칸에 남기고 이유를 보여 준다
+    w.ed_url.setText("abc https://youtu.be/d https://rplay.live/live/x")
+    w.add_from_input()
+    assert len(w.rows) == 4 and w.ed_url.text() == "abc https://rplay.live/live/x" and w.lbl_input.text()
+
+    # 화질을 바꾸면 다음 받기와 설정에 반영, 비어 있으면 아무 일도 없음
+    w.cb_quality.setCurrentIndex(w.cb_quality.findData("480"))
+    assert s["dl_quality"] == "480"
+    w.ed_url.setText("   ")
+    w.add_from_input()
+    assert len(w.rows) == 4 and w.lbl_input.isHidden()
+
+    more = []
+    w.moreRequested.connect(lambda: more.append(1))
+    w.moreRequested.emit()
+    assert more == [1]
+    for r in w.rows:
+        r.state = "done"
+
+
 def test_task_key_ignores_tokens():
     assert task_key("https://cdn.x/live/a.m3u8?token=1") == task_key("https://CDN.x/live/a.m3u8?token=2#t")
     assert task_key("https://cdn.x/live/a.m3u8") != task_key("https://cdn.x/live/b.m3u8")
+
+
+def test_task_key_query_separates_videos():
+    """유튜브는 영상이 쿼리로 갈린다: 예전엔 두 번째 영상을 '이미 받는 중' 으로 막았다."""
+    a, b = "https://www.youtube.com/watch?v=aaa", "https://www.youtube.com/watch?v=bbb"
+    assert task_key(a, a) != task_key(b, b) and task_key(a) != task_key(b)
+    assert task_key(a, a) == task_key(a + "#t", a + "#t") == task_key(a)
 
 
 def test_task_key_same_path_different_broadcast():

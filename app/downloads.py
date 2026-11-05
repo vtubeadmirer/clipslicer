@@ -1,6 +1,6 @@
 """녹화 · 다운로드 목록 창: 여러 개를 동시에 받는다 (줄마다 DownloadWorker 하나).
 
-브라우저 확장에서 온 요청과 'URL 에서 열기' 의 받기가 모두 여기에 한 줄씩 추가된다.
+브라우저 확장에서 온 요청, 'URL 에서 열기' 의 받기, 창 위 주소 입력칸의 받기가 모두 여기에 한 줄씩 추가된다.
 라이브는 줄마다 '■ 녹화 중지 (저장)' 으로 따로 멈출 수 있고, 끝난 파일은 fileReady 로 편집기에 넘긴다.
 
 실시간 클립: 녹화 중인 줄의 '✂ 클립' 또는 전역 단축키(Ctrl+Alt+C 등)로 '방금 지나간 N초' 를 바로 mp4 로 저장한다
@@ -12,9 +12,10 @@ import logging
 import os
 import threading
 import time
+import urllib.parse
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from .i18n import tr
@@ -36,7 +37,11 @@ def task_key(url: str, page: str = "") -> str:
 
     rplay 처럼 모든 방송이 같은 경로(.../track.m3u8)를 쓰고 토큰으로만 구분하는 곳이 있어 경로만으로는
     다른 방송까지 중복으로 막힌다 (0.9.9). 확장이 넘기는 페이지 주소는 방송마다 다르므로 함께 쓴다.
+    주소 하나로 받는 경우는 쿼리가 영상을 가른다 (유튜브 watch?v=…). m3u8 의 쿼리만 토큰으로 본다.
     """
+    from .live_record import is_m3u8
+    if (not page or page == url) and not is_m3u8(url):
+        return _strip(url) + "?" + urllib.parse.urlparse(url).query
     return _strip(page or url) + "|" + _strip(url)
 
 
@@ -237,6 +242,7 @@ class DownloadsWindow(QWidget):
     openRequested = Signal(str, str)
     countChanged = Signal(int)   # 진행 중인 개수
     clipSaved = Signal(str, str)   # 클립 경로 (실패면 ''), 오류
+    moreRequested = Signal()       # '자세히…': 구간 · 폴더 · 쿠키를 고르는 URL 창을 열어 달라는 요청
 
     def __init__(self, parent=None, worker_factory=None, settings=None):
         super().__init__(parent, Qt.Window)
@@ -246,6 +252,31 @@ class DownloadsWindow(QWidget):
         self.settings = settings
         self.rows: list[DownloadRow] = []
         lay = QVBoxLayout(self)
+        # 주소를 넣고 Enter: 창을 닫지 않고 바로 한 줄 추가된다
+        url_bar = QHBoxLayout()
+        self.ed_url = QLineEdit()
+        self.ed_url.setPlaceholderText(tr("영상 주소를 붙여넣고 Enter (여러 개 가능)"))
+        self.ed_url.returnPressed.connect(self.add_from_input)
+        url_bar.addWidget(self.ed_url, 1)
+        self.cb_quality = QComboBox()
+        for label, key in ((tr("최고 화질"), "best"), (tr("1080p 이하"), "1080"), (tr("720p 이하"), "720"), (tr("480p 이하"), "480")):
+            self.cb_quality.addItem(label, key)
+        self.set_quality(settings.value("dl_quality", "best") if settings is not None else "best")
+        self.cb_quality.currentIndexChanged.connect(self._save_quality)
+        url_bar.addWidget(self.cb_quality)
+        b_add = QPushButton(tr("받기"))
+        b_add.clicked.connect(self.add_from_input)
+        url_bar.addWidget(b_add)
+        b_more = QPushButton(tr("자세히…"))
+        b_more.setToolTip(tr("구간만 받기 · 저장 폴더 · 로그인 쿠키를 고릅니다"))
+        b_more.clicked.connect(self.moreRequested)
+        url_bar.addWidget(b_more)
+        lay.addLayout(url_bar)
+        self.lbl_input = QLabel()
+        self.lbl_input.setStyleSheet("color:#e8a33d; font-size:11px;")
+        self.lbl_input.setWordWrap(True)
+        self.lbl_input.setVisible(False)
+        lay.addWidget(self.lbl_input)
         self.lbl_summary = QLabel()
         lay.addWidget(self.lbl_summary)
         # 실시간 클립 설정
@@ -322,6 +353,46 @@ class DownloadsWindow(QWidget):
         LOG.info("받기 추가 (%d개 진행 중): %s", self.active_count(), params["url"][:120])
         self._update_summary()
         return row
+
+    def set_quality(self, quality: str):
+        i = self.cb_quality.findData(quality)
+        self.cb_quality.setCurrentIndex(i if i >= 0 else 0)
+
+    def _save_quality(self, *_):
+        if self.settings is not None:
+            self.settings.setValue("dl_quality", self.cb_quality.currentData())
+
+    def _params_for(self, url: str) -> dict:
+        """입력칸의 주소 → 받기 정보. 저장 폴더 · 쿠키는 'URL 에서 열기' 에서 마지막으로 고른 값."""
+        from .live_record import guess_referer
+        s = self.settings
+        out_dir = (s.value("dl_dir", "") if s is not None else "") or os.path.join(
+            os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
+        cookies = (s.value("dl_cookies", "") if s is not None else "") or ""
+        return {"url": url, "out_dir": out_dir, "quality": self.cb_quality.currentData(), "section": None,
+                "cookies": cookies, "referer": guess_referer(url), "headers": {}, "title": "", "page": url,
+                "cookie_file": ""}
+
+    def add_from_input(self):
+        """입력칸의 주소들을 한 줄씩 추가한다. 받을 수 없는 주소만 칸에 남기고 이유를 보여 준다."""
+        from .live_record import unsupported_page
+        rest, notes = [], []
+        for url in self.ed_url.text().split():
+            msg = (tr("http:// 또는 https:// 로 시작하는 주소를 넣어 주세요.")
+                   if not url.lower().startswith(("http://", "https://")) else unsupported_page(url))
+            if msg:
+                rest.append(url)
+                notes.append(msg)
+                continue
+            try:
+                if self.add(self._params_for(url)) is None:
+                    notes.append(tr("이미 받는 중입니다: {0}").format(url[:80]))
+            except OSError as ex:
+                rest.append(url)
+                notes.append(str(ex))
+        self.ed_url.setText(" ".join(rest))
+        self.lbl_input.setText(notes[0] if notes else "")
+        self.lbl_input.setVisible(bool(notes))
 
     def _on_row_finished(self, row: DownloadRow):
         self._update_summary()

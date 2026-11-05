@@ -686,6 +686,10 @@ EN = {
     # ---- 녹화 공통
     "열기": "Open",
     "■ 녹화 중지 (저장)": "■ Stop recording (save)",
+    "영상 주소를 붙여넣고 Enter (여러 개 가능)": "Paste video addresses and press Enter (several at once)",
+    "자세히…": "More…",
+    "구간만 받기 · 저장 폴더 · 로그인 쿠키를 고릅니다": "Choose a section, the save folder and login cookies",
+    "이미 받는 중입니다: {0}": "Already downloading: {0}",
     # ---- 업데이트 안정화 (0.9.5)
     '같은 폴더에서 ClipSlicer 창이 {0}개 더 열려 있습니다.\n그 창들을 모두 닫은 뒤 다시 업데이트해 주세요 (열려 있으면 파일이 잠겨 교체가 실패합니다).': '{0} more ClipSlicer window(s) are running from this folder.\nClose them all and update again (open windows lock the files and the replacement fails).',
     '프로그램을 닫고 새 버전으로 교체한 뒤 다시 엽니다 (보통 10~30초).\n다시 열릴 때까지 ClipSlicer 를 직접 실행하지 마세요.\n계속할까요?': 'The app will close, replace its files and reopen (usually 10–30 s).\nDo not start ClipSlicer yourself until it reopens.\nContinue?',

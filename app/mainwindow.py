@@ -1890,6 +1890,8 @@ class MainWindow(QMainWindow):
         if accepted and d.params:
             self.settings.setValue("dl_dir", d.out_dir)
             self.settings.setValue("dl_quality", d.quality)
+            if self.downloads_window is not None:
+                self.downloads_window.set_quality(d.quality)
             self.start_download(d.params)
 
     # ---- 녹화 · 다운로드 목록 ----
@@ -1900,6 +1902,7 @@ class MainWindow(QMainWindow):
             w.fileReady.connect(self._on_download_file)
             w.clipSaved.connect(self._on_clip_saved)
             w.openRequested.connect(self._open_downloaded)
+            w.moreRequested.connect(self.open_url)
             w.countChanged.connect(self._on_download_count)
             self.downloads_window = w
         w.show()
