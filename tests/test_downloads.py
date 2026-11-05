@@ -77,6 +77,69 @@ def test_url_box_adds_rows_without_closing(tmp_path):
         r.state = "done"
 
 
+_DETACH = r"""
+import os, sys, tempfile
+sys.path.insert(0, sys.argv[1])
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["LOCALAPPDATA"] = tempfile.mkdtemp()
+from PySide6.QtCore import QObject, QSettings, QTimer, Signal
+from PySide6.QtWidgets import QApplication, QMessageBox
+app = QApplication([])
+from app import mainwindow
+class Fake(QObject):
+    progress = Signal(float, str)
+    done = Signal(str, str)
+    liveStarted = Signal()
+    running = True
+    def start(self): pass
+    def isRunning(self): return self.running
+    def cancel(self):
+        self.running = False
+        self.done.emit("", mainwindow.tr("취소됨"))
+w = mainwindow.MainWindow()
+w.settings = QSettings(os.path.join(tempfile.mkdtemp(), "s.ini"), QSettings.IniFormat)
+shutdown = []
+w.player.shutdown = lambda: shutdown.append(1)
+w.player.pause = lambda: None
+w.show()
+d = w.show_downloads()
+d.worker_factory = lambda p: Fake()
+out = tempfile.mkdtemp()
+row = d.add({"url": "https://x/a.mp4", "out_dir": out, "page": "", "title": "a"})
+res = {"independent": d.parent() is None}
+# 받는 중에 편집 창을 닫으면 편집 창만 숨는다. 끝난 파일은 숨은 창에서 재생을 시작하지 않는다
+res["hide"] = (w.close(), w.isVisible(), d.isVisible(), d.lbl_main.isHidden()) == (False, False, True, False)
+opened = []
+w.add_files = lambda *a, **k: opened.append(a)
+w._add_file = lambda *a, **k: None
+w._on_download_file("C:/v/a.mp4", "")
+res["no_autoplay"] = not opened
+# 다시 열기 → 다시 닫기
+d.mainRequested.emit()
+res["reopen"] = w.isVisible() and d.lbl_main.isHidden()
+w.close()
+# 숨긴 상태에서 받기 창을 닫으면 종료 확인. '아니요' 면 그대로
+QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)
+res["refuse"] = (d.close(), d.isVisible(), w.isVisible(), w._quitting, shutdown) == (False, True, False, False, [])
+# '예' 면 프로그램이 끝난다
+QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+QTimer.singleShot(0, d.close)
+QTimer.singleShot(20000, lambda: (print("RESULT timeout", flush=True), os._exit(1)))
+app.exec()
+res["quit"] = shutdown == [1] and not d.isVisible() and row.state != "running" and w.settings.status() == QSettings.NoError
+print("RESULT", " ".join(k for k, v in res.items() if not v) or "ok", flush=True)
+os._exit(0)
+"""
+
+
+def test_downloads_window_outlives_main_window():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = subprocess.run([sys.executable, "-c", _DETACH, root], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=120, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    line = next((l for l in r.stdout.splitlines() if l.startswith("RESULT")), None)
+    assert line == "RESULT ok", (line, r.returncode, r.stderr[-1500:])
+
+
 def test_task_key_ignores_tokens():
     assert task_key("https://cdn.x/live/a.m3u8?token=1") == task_key("https://CDN.x/live/a.m3u8?token=2#t")
     assert task_key("https://cdn.x/live/a.m3u8") != task_key("https://cdn.x/live/b.m3u8")

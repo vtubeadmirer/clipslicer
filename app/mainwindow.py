@@ -145,6 +145,7 @@ class MainWindow(QMainWindow):
         self._build_shortcuts()
         self.notifier = Notifier(self, QApplication.windowIcon())
         self.downloads_window = None   # 녹화 · 다운로드 목록 (처음 쓸 때 만든다)
+        self._quitting = False         # 받는 중에 창을 닫으면 편집 창만 숨긴다. True 면 프로그램을 끝낸다
         self.bridge = Bridge(self)   # 브라우저 확장 'ClipSlicer 연결' 수신 (127.0.0.1 전용)
         self.bridge.received.connect(self._on_browser_request)
         self.bridge.clipRequested.connect(self._on_clip_request)
@@ -989,9 +990,14 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, e):
         n = self.downloads_active()
+        if n and not self._quitting:
+            e.ignore()
+            self._hide_to_downloads()
+            return
+        ask_parent = self if self.isVisible() else self.downloads_window
         if n:
-            if QMessageBox.question(self, tr("종료"), tr("녹화 · 다운로드가 {0}개 진행 중입니다.\n"
-                                                      "라이브 녹화는 지금까지 받은 분량을 저장하고, 다운로드는 취소한 뒤 종료할까요?").format(n)) != QMessageBox.Yes:
+            if QMessageBox.question(ask_parent, tr("종료"), tr("녹화 · 다운로드가 {0}개 진행 중입니다.\n"
+                                                            "라이브 녹화는 지금까지 받은 분량을 저장하고, 다운로드는 취소한 뒤 종료할까요?").format(n)) != QMessageBox.Yes:
                 e.ignore()
                 return
             self.statusBar().showMessage(tr("녹화를 저장하는 중…"))
@@ -1001,7 +1007,7 @@ class MainWindow(QMainWindow):
             finally:
                 QApplication.restoreOverrideCursor()
         if self.export_worker and self.export_worker.isRunning():
-            if QMessageBox.question(self, tr("종료"), tr("내보내기가 진행 중입니다. 취소하고 종료할까요?")) != QMessageBox.Yes:
+            if QMessageBox.question(ask_parent, tr("종료"), tr("내보내기가 진행 중입니다. 취소하고 종료할까요?")) != QMessageBox.Yes:
                 e.ignore()
                 return
             self.export_worker.cancel()
@@ -1009,11 +1015,9 @@ class MainWindow(QMainWindow):
         if self.discord_worker and self.discord_worker.isRunning():
             self.discord_worker.cancel()
             self.discord_worker.wait(3000)
-        if self.current:
-            self.current.last_position = self.player.position
-            self.current.dirty = True
-        self._save_dirty(force=True)
-        self._save_settings()
+        self._quitting = True
+        LOG.info("종료")
+        self._save_state()
         self.bridge.stop()
         self.timeline.canvas.popup.hide()
         for w in self.workers.values():
@@ -1021,9 +1025,48 @@ class MainWindow(QMainWindow):
                 w.wait(2000)
         if self.bookmark_window is not None:
             self.bookmark_window.close()
+        if self.downloads_window is not None:
+            self.downloads_window.close()
         self.notifier.hide()
         self.player.shutdown()
         super().closeEvent(e)
+        QApplication.quit()   # 편집 창을 숨겨 둔 채 끝날 때도 확실히
+
+    def _save_state(self):
+        if self.current:
+            self.current.last_position = self.player.position
+            self.current.dirty = True
+        self._save_dirty(force=True)
+        self._save_settings()
+        self.settings.sync()   # 종료 정리를 건너뛰므로 (main.py) 여기서 파일에 쓴다
+
+    def _hide_to_downloads(self):
+        """받는 중에 편집 창을 닫음: 프로그램은 끝내지 않고 편집 창만 숨긴다. 끝내려면 녹화 · 다운로드 창을 닫는다."""
+        self.player.pause()
+        self._save_state()
+        self.timeline.canvas.popup.hide()
+        if self.bookmark_window is not None:
+            self.bookmark_window.close()
+        self.show_downloads().lbl_main.setVisible(True)
+        self.hide()
+
+    def show_main(self):
+        self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        if self.downloads_window is not None:
+            self.downloads_window.lbl_main.setVisible(False)
+
+    def _on_downloads_closing(self) -> bool:
+        """녹화 · 다운로드 창을 닫음: 편집 창이 있으면 목록만 숨기고, 숨겨 둔 상태면 프로그램을 끝낸다. 닫아도 되면 True."""
+        if self._quitting or self.isVisible():
+            return True
+        self._quitting = True
+        if self.close():
+            return True
+        self._quitting = False   # 종료 확인에서 '아니요'
+        return False
 
     # ------------------------------------------------------------ 파일
     def dragEnterEvent(self, e: QDragEnterEvent):
@@ -1878,11 +1921,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("디스코드 전송 완료: 성공 {0}, 실패 {1}").format(ok, fail), 6000)
 
     # ---- URL 다운로드 ----
-    def open_url(self, *_args):
+    def open_url(self, *_args, parent=None):
         """URL 에서 받기: 주소 · 화질 · 쿠키를 입력받아 녹화 · 다운로드 목록에 넘긴다 (여러 개 동시에)."""
         default_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
-        d = DownloadDialog(self, default_dir, self.settings.value("dl_quality", "best"),
+        d = DownloadDialog(parent or self, default_dir, self.settings.value("dl_quality", "best"),
                            self.settings.value("dl_cookies", "") or "", self.settings.value("dl_referer", "") or "")
         accepted = d.exec()
         self.settings.setValue("dl_cookies", d.cookies)
@@ -1898,13 +1941,17 @@ class MainWindow(QMainWindow):
     def show_downloads(self) -> DownloadsWindow:
         w = self.downloads_window
         if w is None:
-            w = DownloadsWindow(self, settings=self.settings)
+            # 편집 창의 자식으로 두면 편집 창을 최소화할 때 Windows 가 같이 숨긴다
+            w = DownloadsWindow(settings=self.settings)
+            w.close_guard = self._on_downloads_closing
             w.fileReady.connect(self._on_download_file)
             w.clipSaved.connect(self._on_clip_saved)
             w.openRequested.connect(self._open_downloaded)
-            w.moreRequested.connect(self.open_url)
+            w.moreRequested.connect(lambda: self.open_url(parent=w))
+            w.mainRequested.connect(self.show_main)
             w.countChanged.connect(self._on_download_count)
             self.downloads_window = w
+        w.setWindowState(w.windowState() & ~Qt.WindowMinimized)
         w.show()
         w.raise_()
         w.activateWindow()
@@ -1955,7 +2002,7 @@ class MainWindow(QMainWindow):
     def _on_download_file(self, path: str, page: str):
         """받기가 끝남: 편집 중인 영상이 없으면 바로 열고, 있으면 파일 목록에만 추가 (편집 화면을 빼앗지 않음)."""
         remember = self.act_recent_dl.isChecked()
-        if self.current is None:
+        if self.current is None and self.isVisible() and not self.isMinimized():
             self.add_files([path], remember)
         else:
             self._add_file(path, remember)
@@ -1963,10 +2010,9 @@ class MainWindow(QMainWindow):
         self._remember_source(path, page)
 
     def _open_downloaded(self, path: str, page: str):
+        self.show_main()
         self.add_files([path])
         self._remember_source(path, page)
-        self.raise_()
-        self.activateWindow()
 
     def _remember_source(self, path: str, page: str):
         proj = self.projects.get(os.path.abspath(path))
@@ -1978,8 +2024,6 @@ class MainWindow(QMainWindow):
     # ---- 브라우저 확장 연결 ----
     def _on_browser_request(self, req: dict):
         """확장이 보낸 스트림/페이지 → 목록에 바로 추가해 받기 시작 (동시에 여러 개)."""
-        if self.isMinimized():
-            self.showNormal()
         out_dir = self.settings.value("dl_dir", "") or os.path.join(
             os.environ.get("USERPROFILE", os.path.expanduser("~")), "Videos", "ClipSlicer")
         cookie_file = ""

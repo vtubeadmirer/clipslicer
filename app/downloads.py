@@ -243,9 +243,11 @@ class DownloadsWindow(QWidget):
     countChanged = Signal(int)   # 진행 중인 개수
     clipSaved = Signal(str, str)   # 클립 경로 (실패면 ''), 오류
     moreRequested = Signal()       # '자세히…': 구간 · 폴더 · 쿠키를 고르는 URL 창을 열어 달라는 요청
+    mainRequested = Signal()       # '편집 창 열기'
 
     def __init__(self, parent=None, worker_factory=None, settings=None):
         super().__init__(parent, Qt.Window)
+        self.close_guard = None   # 닫아도 되면 True 를 돌려주는 함수
         self.setWindowTitle(tr("녹화 · 다운로드"))
         self.resize(680, 440)
         self.worker_factory = worker_factory or _default_worker
@@ -272,6 +274,11 @@ class DownloadsWindow(QWidget):
         b_more.clicked.connect(self.moreRequested)
         url_bar.addWidget(b_more)
         lay.addLayout(url_bar)
+        self.lbl_main = QLabel(tr("편집 창을 닫아 두었습니다. 받기는 계속되며, 이 창을 닫으면 프로그램이 끝납니다."))
+        self.lbl_main.setStyleSheet("color:#9aa0a6; font-size:11px;")
+        self.lbl_main.setWordWrap(True)
+        self.lbl_main.setVisible(False)
+        lay.addWidget(self.lbl_main)
         self.lbl_input = QLabel()
         self.lbl_input.setStyleSheet("color:#e8a33d; font-size:11px;")
         self.lbl_input.setWordWrap(True)
@@ -328,8 +335,17 @@ class DownloadsWindow(QWidget):
         b_clear = QPushButton(tr("끝난 항목 지우기"))
         b_clear.clicked.connect(self.clear_finished)
         bottom.addWidget(b_clear)
+        b_main = QPushButton(tr("편집 창 열기"))
+        b_main.clicked.connect(self.mainRequested)
+        bottom.addWidget(b_main)
         lay.addLayout(bottom)
         self._update_summary()
+
+    def closeEvent(self, e):
+        if self.close_guard and not self.close_guard():
+            e.ignore()
+            return
+        super().closeEvent(e)
 
     # ---- 추가 ----
     def find_active(self, url: str, page: str = "") -> DownloadRow | None:

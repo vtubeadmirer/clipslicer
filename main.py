@@ -1,5 +1,6 @@
 """ClipSlicer 실행 진입점."""
 from app.i18n import tr
+import logging
 import os
 import sys
 import traceback
@@ -104,4 +105,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    code = main()
+    # 저장은 창을 닫을 때 끝났다. Python 종료 정리가 남은 Qt 객체를 지우다 드물게 abort 하므로 (0xC0000409) 건너뛴다.
+    logging.shutdown()
+    os._exit(code)
