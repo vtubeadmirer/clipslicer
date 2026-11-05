@@ -235,7 +235,7 @@ class DownloadWorker(QThread):
 
     def _fetch(self, yt_dlp, hook) -> str:
         from . import live_record
-        if (self.stream or live_record.is_m3u8(self.url)) and not self.section:
+        if (self.stream or live_record.is_m3u8(self.url) or live_record.is_flv(self.url)) and not self.section:
             return self._download_m3u8(yt_dlp, hook)
         if self.section:
             return self._download_section(yt_dlp, hook)
@@ -252,7 +252,11 @@ class DownloadWorker(QThread):
             cookie = lr.cookie_header(self.cookies, self.url)
             headers = lr.request_headers(self.referer, cookie)
         max_h = int(self.quality) if self.quality in ("1080", "720", "480") else 0
-        media_url, live = lr.resolve(self.url, headers, max_h)
+        if lr.is_flv(self.url):   # 재생 목록이 없다: 열리는지만 보고 바로 녹화 (길이가 정해진 파일이면 끝까지 받고 끝난다)
+            lr.probe_flv(self.url, headers)
+            media_url, live = self.url, True
+        else:
+            media_url, live = lr.resolve(self.url, headers, max_h)
         host = urllib.parse.urlparse(self.url).netloc.split(":")[0] or "stream"
         stamp = time.strftime("%Y%m%d_%H%M%S")
         base = os.path.join(self.out_dir, safe_filename(f"{(self.title or host)[:80]} {stamp}"))

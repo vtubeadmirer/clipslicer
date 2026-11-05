@@ -1,4 +1,4 @@
-// ClipSlicer 연결 — 탭에서 오가는 HLS 재생 목록(m3u8) 요청을 요청 헤더(쿠키·인증 포함)와 함께 기억해 둔다.
+// ClipSlicer 연결 — 탭에서 오가는 영상 스트림(HLS m3u8 · FLV) 요청을 요청 헤더(쿠키·인증 포함)와 함께 기억해 둔다.
 // 아무것도 밖으로 보내지 않는다. 사용자가 팝업에서 버튼을 눌렀을 때만 이 PC 의 ClipSlicer(127.0.0.1)로 보낸다.
 
 const MAX_PER_TAB = 15;
@@ -6,12 +6,12 @@ const DROP_HEADERS = new Set(["range", "if-none-match", "if-modified-since", "if
 const pending = new Map();  // requestId → {url, headers, t}
 
 function isPlaylistUrl(url) {
-  try { return new URL(url).pathname.toLowerCase().endsWith(".m3u8"); } catch { return false; }
+  try { return /\.(m3u8|flv)$/.test(new URL(url).pathname.toLowerCase()); } catch { return false; }
 }
 
 function isPlaylistType(headers) {
   const ct = (headers || []).find(h => h.name.toLowerCase() === "content-type");
-  return !!ct && /mpegurl/i.test(ct.value || "");
+  return !!ct && /mpegurl|x-flv/i.test(ct.value || "");
 }
 
 // 서비스 워커가 대신 받은 요청은 tabId 가 -1 → 그 요청을 낸 사이트(initiator)의 탭으로 돌린다 (활성 탭 우선)

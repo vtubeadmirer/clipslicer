@@ -42,6 +42,93 @@ def test_url_helpers():
     assert lr.ytdlp_cookie_opts("C:/x/cookies.txt") == {"cookiefile": "C:/x/cookies.txt"}
 
 
+class _FlvHandler(http.server.BaseHTTPRequestHandler):
+    """rplay 의 BytePlus 라이브 흉내: 서명 주소 + Referer 검사, 길이 없이 흘려 보냄 (/live.flv) · 길이 있는 파일 (/file.flv)."""
+    data = b""
+    seen: list = []
+
+    def do_GET(self):
+        self.seen.append(self.path)
+        if self.headers.get("Referer") != "https://rplay.live/" or "sign=ok" not in self.path:
+            self.send_error(403)
+            return
+        live = self.path.startswith("/live.flv")
+        self.send_response(200)
+        self.send_header("Content-Type", "video/x-flv")
+        if not live:
+            self.send_header("Content-Length", str(len(self.data)))
+        self.end_headers()
+        step = max(1, len(self.data) // 40)
+        try:
+            for i in range(0, len(self.data), step):
+                self.wfile.write(self.data[i:i + step])
+                if live:
+                    time.sleep(0.25)
+        except OSError:
+            pass
+
+    def log_message(self, *a):
+        pass
+
+
+@pytest.fixture
+def flv_server(tmp_path):
+    src = tmp_path / "src.flv"
+    subprocess.run([find_tool("ffmpeg"), "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=10",
+                    "-f", "lavfi", "-i", "sine=frequency=440:duration=10", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "flv", str(src)], check=True, capture_output=True)
+    _FlvHandler.data = src.read_bytes()
+    _FlvHandler.seen = []
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _FlvHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+
+
+def _flv_worker(url, out, stop_after=None):
+    from PySide6.QtWidgets import QApplication
+    from app.workers import DownloadWorker
+    _app = QApplication.instance() or QApplication([])
+    res = {}
+    w = DownloadWorker(url, str(out), headers={"Referer": "https://rplay.live/", "User-Agent": "UA"}, stream=True, title="방송")
+    w.done.connect(lambda p, e: res.update(path=p, err=e))
+    if stop_after:
+        threading.Timer(stop_after, w.stop_recording).start()
+    w.run()
+    return res
+
+
+def test_flv_helpers():
+    assert lr.is_flv("https://livestream-play.rplay.live/live/abc_abrhd.flv?sign=x&expire=1")
+    assert not lr.is_flv("https://x/a.m3u8?f=.flv") and not lr.is_m3u8("https://x/a.flv")
+    assert "-extension_picky" not in lr.LiveRecorder("https://x/a.flv?sign=1", "o.ts").command()
+    assert "-extension_picky" in lr.LiveRecorder("https://x/a.m3u8", "o.ts").command()
+
+
+@pytest.mark.skipif(not find_tool("ffmpeg"), reason="ffmpeg 없음")
+def test_flv_live_probe_and_record(flv_server, tmp_path):
+    from app import ffmpeg_tools as ft
+    h = {"Referer": "https://rplay.live/"}
+    url = flv_server + "/live.flv?sign=ok"
+    t0 = time.time()
+    info = lr.describe(url, h)
+    assert info["kind"] == "media" and info["live"] is True and not info["error"] and time.time() - t0 < 5   # 끝까지 읽지 않는다
+    assert lr.describe(flv_server + "/file.flv?sign=ok", h)["live"] is False
+    assert lr.describe(url, {})["error"]                                                                       # 헤더 없음 → 거부
+    assert lr.describe(flv_server + "/live.flv?sign=no", h)["error"]
+
+    # 라이브: 녹화 중지를 누르면 그때까지 저장, 소리도 함께
+    res = _flv_worker(url, tmp_path, stop_after=4)
+    assert res.get("path", "").endswith(".mp4") and not res.get("err"), res
+    i = ft.probe(res["path"])
+    assert i["has_audio"] and i["vcodec"] == "h264" and 0.5 < i["duration"] < 9, i
+
+    # 방송이 끝나면(연결이 닫히면) 스스로 저장, 서명이 틀리면 알아볼 수 있는 오류
+    res = _flv_worker(flv_server + "/file.flv?sign=ok", tmp_path)
+    assert res.get("path") and abs(ft.probe(res["path"])["duration"] - 10) < 1.5, res
+    assert "403" in _flv_worker(flv_server + "/live.flv?sign=no", tmp_path)["err"]
+
+
 def test_vimeo_player_url():
     p = "https://player.vimeo.com/video/76979871"
     for u in ("https://vimeo.com/76979871", "https://www.vimeo.com/76979871/", "http://vimeo.com/76979871?share=copy",

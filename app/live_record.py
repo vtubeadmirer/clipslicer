@@ -45,6 +45,11 @@ def is_m3u8(url: str) -> bool:
     return path.endswith(".m3u8") or ".m3u8" in url.lower().split("?")[0]
 
 
+def is_flv(url: str) -> bool:
+    """FLV 라이브 주소 (rplay 의 BytePlus 방송: .../abc_abrhd.flv?sign=…). 재생 목록이 없어 바로 녹화한다."""
+    return urllib.parse.urlparse(url).path.lower().endswith(".flv")
+
+
 def guess_referer(url: str) -> str:
     host = urllib.parse.urlparse(url).netloc.lower()
     for key, ref in REFERER_HINTS.items():
@@ -164,10 +169,28 @@ def fetch_text(url: str, headers: dict, timeout: int = 20) -> str:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            raise LiveError(tr("접근이 거부되었습니다 (HTTP {0}). 로그인 쿠키나 참조 페이지(Referer)를 확인하세요. "
-                               "m3u8 주소에 붙은 토큰이 만료됐을 수도 있습니다.").format(e.code)) from e
-        raise LiveError(tr("재생 목록을 받지 못했습니다 (HTTP {0}).").format(e.code)) from e
+        raise _http_error(e) from e
+    except OSError as e:
+        raise LiveError(tr("재생 목록을 받지 못했습니다: {0}").format(e)) from e
+
+
+def _http_error(e: urllib.error.HTTPError) -> LiveError:
+    if e.code in (401, 403):
+        return LiveError(tr("접근이 거부되었습니다 (HTTP {0}). 로그인 쿠키나 참조 페이지(Referer)를 확인하세요. "
+                            "m3u8 주소에 붙은 토큰이 만료됐을 수도 있습니다.").format(e.code))
+    return LiveError(tr("재생 목록을 받지 못했습니다 (HTTP {0}).").format(e.code))
+
+
+def probe_flv(url: str, headers: dict, timeout: int = 8) -> bool:
+    """FLV 가 열리는지 앞부분만 받아 본다 (라이브는 끝까지 읽으면 끝나지 않는다). 길이를 모르면 라이브 → True."""
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            if r.read(3) != b"FLV":
+                raise LiveError(tr("FLV 영상이 아닙니다."))
+            return r.headers.get("Content-Length") is None
+    except urllib.error.HTTPError as e:
+        raise _http_error(e) from e
     except OSError as e:
         raise LiveError(tr("재생 목록을 받지 못했습니다: {0}").format(e)) from e
 
@@ -230,6 +253,9 @@ def describe(url: str, headers: dict, timeout: int = 8) -> dict:
     """
     info = {"kind": "", "live": None, "heights": [], "audio_only": False, "drm": "", "error": ""}
     try:
+        if is_flv(url):
+            info["kind"], info["live"] = "media", probe_flv(url, headers, timeout)
+            return info
         text = fetch_text(url, headers, timeout)
         if not text.lstrip().startswith("#EXTM3U"):
             info["error"] = tr("재생 목록이 아님")
@@ -299,7 +325,7 @@ def resolve(url: str, headers: dict, max_height: int = 0) -> tuple[str, bool]:
 
 # --------------------------------------------------------------------------- 녹화
 class LiveRecorder:
-    """ffmpeg 로 HLS 를 .ts 에 그대로 저장. stop() 은 q 를 보내 정상 종료시킨다."""
+    """ffmpeg 로 HLS · FLV 를 .ts 에 그대로 저장. stop() 은 q 를 보내 정상 종료시킨다."""
 
     def __init__(self, url: str, dst_ts: str, referer: str = "", cookie: str = "",
                  input_args: list[str] | None = None, headers: dict | None = None):
@@ -325,7 +351,8 @@ class LiveRecorder:
                 cmd += ["-headers", hdr]
             cmd += ["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "10",
                     "-rw_timeout", "30000000"]
-            cmd += HLS_INPUT_ARGS   # 입력은 항상 HLS 재생 목록
+            if not is_flv(self.url):
+                cmd += HLS_INPUT_ARGS   # HLS 재생 목록에만 (다른 입력에 주면 실패한다)
         cmd += self.input_args + ["-i", self.url, "-map", "0:v?", "-map", "0:a?", "-c", "copy",
                                   "-f", "mpegts", "-progress", "pipe:1", self.dst_ts]
         return cmd
