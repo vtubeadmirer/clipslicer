@@ -6,6 +6,7 @@ yt-dlp 의 내장 HLS 다운로더는 구간 다운로드를 지원하지 않고
 from __future__ import annotations
 
 from .i18n import tr
+from .live_record import ssl_context
 import os
 import re
 import urllib.parse
@@ -18,7 +19,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClipSlicer"
 
 def fetch(url: str, timeout: int = 30) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=ssl_context()) as r:
         return r.read()
 
 

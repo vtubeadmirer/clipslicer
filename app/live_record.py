@@ -8,9 +8,11 @@ yt-dlp 가 페이지 주소를 지원하지 않는 사이트(예: rplay.live)도
 """
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
+import ssl
 import subprocess
 import threading
 import time
@@ -43,6 +45,16 @@ class LiveError(Exception):
 def is_m3u8(url: str) -> bool:
     path = urllib.parse.urlparse(url).path.lower()
     return path.endswith(".m3u8") or ".m3u8" in url.lower().split("?")[0]
+
+
+@functools.lru_cache(maxsize=1)
+def ssl_context() -> ssl.SSLContext:
+    """Windows 저장소 + certifi. Windows 는 루트 인증서를 처음 쓸 때 받아 오므로 (Chrome 은 자체 저장소를 쓴다)
+    브라우저에서 열리는 주소가 Windows 저장소만으로는 실패할 수 있다 (rplay 의 Amazon Root CA 1)."""
+    import certifi
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=certifi.where())
+    return ctx
 
 
 def is_flv(url: str) -> bool:
@@ -166,7 +178,7 @@ def cookie_header(cookies: str, url: str) -> str:
 def fetch_text(url: str, headers: dict, timeout: int = 20) -> str:
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl_context()) as r:
             return r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         raise _http_error(e) from e
@@ -185,7 +197,7 @@ def probe_flv(url: str, headers: dict, timeout: int = 8) -> bool:
     """FLV 가 열리는지 앞부분만 받아 본다 (라이브는 끝까지 읽으면 끝나지 않는다). 길이를 모르면 라이브 → True."""
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl_context()) as r:
             if r.read(3) != b"FLV":
                 raise LiveError(tr("FLV 영상이 아닙니다."))
             return r.headers.get("Content-Length") is None

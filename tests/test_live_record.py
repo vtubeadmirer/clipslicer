@@ -1,6 +1,7 @@
 """m3u8 직접 받기 · 라이브 녹화: 순수 함수 + 로컬 HTTP 서버로 Referer/쿠키 검사 + 실제 녹화/중지."""
 import http.server
 import os
+import ssl
 import subprocess
 import sys
 import threading
@@ -96,6 +97,12 @@ def _flv_worker(url, out, stop_after=None):
         threading.Timer(stop_after, w.stop_recording).start()
     w.run()
     return res
+
+
+def test_ssl_context_has_certifi_roots():
+    names = {v for c in lr.ssl_context().get_ca_certs() for rdn in c["subject"] for k, v in rdn if k == "commonName"}
+    assert "Amazon Root CA 1" in names   # Windows 저장소에 아직 없어도 열려야 한다
+    assert lr.ssl_context().verify_mode == ssl.CERT_REQUIRED and lr.ssl_context().check_hostname
 
 
 def test_flv_helpers():

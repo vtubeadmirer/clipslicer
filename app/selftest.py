@@ -83,6 +83,14 @@ def _extension() -> str:
     return "browser_extension ok"
 
 
+def _tls_roots() -> str:
+    from .live_record import ssl_context
+    names = {v for c in ssl_context().get_ca_certs() for rdn in c["subject"] for k, v in rdn if k == "commonName"}
+    if "Amazon Root CA 1" not in names:   # certifi 가 번들되지 않으면 rplay 라이브를 못 연다
+        raise RuntimeError("certifi roots missing")
+    return f"{len(names)} roots"
+
+
 def run(out_path: str) -> int:
     from . import __version__
     from .paths import base_dir
@@ -94,6 +102,7 @@ def run(out_path: str) -> int:
     _check(results, "updater", _updater)
     _check(results, "settings", _settings)
     _check(results, "extension", _extension)
+    _check(results, "tls_roots", _tls_roots)
     ok = all(r["ok"] for r in results.values())
     report = {"version": __version__, "frozen": bool(getattr(sys, "frozen", False)), "dir": base_dir(),
               "ok": ok, "checks": results}

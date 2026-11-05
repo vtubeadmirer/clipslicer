@@ -21,6 +21,7 @@ $ErrorActionPreference = "Continue"
   --add-binary "bin\libmpv-2.dll;." `
   --add-data "bin\ffmpeg;ffmpeg" `
   --collect-submodules yt_dlp `
+  --collect-data certifi `
   --exclude-module PIL --exclude-module numpy --exclude-module tkinter `
   --exclude-module yaml --exclude-module psutil `
   --exclude-module PySide6.QtPdf --exclude-module PySide6.QtQuick3D `
