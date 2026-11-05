@@ -270,8 +270,9 @@ play it in <b>your everyday browser</b> and send it with the <b>ClipSlicer 연�
 so members-only or age-restricted streams you can watch can also be saved.</p>
 <p><b>Install (once)</b>: <b>File ▸ Browser extension link…</b> → <b>Open extension folder</b>. Type <code>chrome://extensions</code>
 (Edge: <code>edge://extensions</code>) in the address bar → turn on <b>Developer mode</b> → <b>Load unpacked</b> → choose that folder.</p>
+<p>Live streams delivered as FLV are detected as well as m3u8.</p>
 <p><b>Use</b>: <b>play</b> the stream or video → ClipSlicer icon in the toolbar (a red number shows how many streams were found) → <b>녹화/받기</b> (Record/Get; the extension popup is in Korean).
-ClipSlicer comes to the front and starts right away; live streams record until you press <b>● Stop recording (save)</b>.
+A row is added to the Recordings &amp; downloads window and it starts right away; live streams record until you press <b>● Stop recording (save)</b>.
 For sites with address support such as YouTube or Chzzk, <b>이 페이지 주소 보내기</b> (Send this page, with login) downloads it with your login cookies.</p>
 <div class="tip">Data only travels inside this PC (127.0.0.1) and ClipSlicer only accepts requests from this extension. ClipSlicer must be running.
 DRM-protected videos can't be downloaded. Use it to archive your own streams or streams you have permission to keep.</div>
@@ -281,7 +282,8 @@ DRM-protected videos can't be downloaded. Use it to archive your own streams or 
 <p><b>File ▸ Recordings &amp; downloads…</b> (<kbd>Ctrl+J</kbd>). Streams sent from the browser extension and videos from <b>Open from URL</b> each get a row here
 and <b>run at the same time</b>. Stop each live recording with its own <b>■ Stop recording (save)</b>; when done, use <b>Open in editor</b> or <b>Folder</b>.
 If you are editing a video, finished files are only added to the file list so your editor view is not taken over. Sending the same stream twice is blocked.</p>
-<div class="tip">If recordings are running when you close ClipSlicer, it asks whether to save what was recorded so far. Updates are not applied while recording.
+<p>This window is independent of the editor, so you can <b>minimize or close the editor window while downloading</b>. If you close the editor during a download, the download continues; <b>Open editor window</b> brings it back. Closing this window while the editor is closed exits the program.</p>
+<div class="tip">If recordings are running when you exit the program, it asks whether to save what was recorded so far. Updates are not applied while recording.
 Several downloads at once need that much more bandwidth and disk space (one 1080p stream is roughly 3–4 GB per hour).</div>
 
 <h2>Realtime clips (that moment just now)</h2>
@@ -428,7 +430,7 @@ Chat is stored separately as <code>video.mp4.clipslicer.chat.json</code> and the
 <p>When a new version exists a <b>⬆ Update</b> button appears at the bottom right. It shows the release notes and offers <b>Update now / Later / Skip this version</b>.
 Update now downloads the zip, verifies its checksum, closes the app, replaces the files and restarts. <code>settings.ini</code>, logs and project files are kept and the previous version stays in <code>_backup</code>.
 In read-only locations only the download page is offered.</p>
-<p><b>Lite updates</b>: releases that only change the code download a lite zip of about 20 MB and keep the bundled ffmpeg and libmpv (the update dialog says "lite").
+<p><b>Lite updates</b>: releases that only change the code download a lite zip of about 40 MB and keep the bundled ffmpeg and libmpv (the update dialog says "lite").
 Releases that change ffmpeg or libmpv download the full zip. The choice is automatic.</p>
 
 <h2>Portable</h2>

@@ -24,11 +24,11 @@ flowchart LR
 
 ## Download
 
-Grab `ClipSlicer-vX.Y.Z-win64.zip` from [Releases](https://github.com/vtubeadmirer/clipslicer/releases/latest), unzip, run `ClipSlicer.exe`. The current version is **0.8**.
+Grab `ClipSlicer-vX.Y.Z-win64.zip` from [Releases](https://github.com/vtubeadmirer/clipslicer/releases/latest), unzip, run `ClipSlicer.exe`.
 Windows 10 (1809+) / 11, 64-bit. If SmartScreen warns on first launch, choose **More info → Run anyway**.
 
 When a new version is published, an **⬆ update** button appears inside the app; one click downloads, verifies, swaps the files and restarts.
-Releases that only change the code arrive as a **lite update** of about 20 MB that keeps the bundled ffmpeg and libmpv.
+Releases that only change the code arrive as a **lite update** of about 40 MB that keeps the bundled ffmpeg and libmpv.
 
 ## 30-second tour
 
@@ -48,7 +48,7 @@ Releases that only change the code arrive as a **lite update** of about 20 MB th
 | Stream bookmarks | **Stream bookmark mode**: a global hotkey (`Ctrl+Alt+B` …) records moments while streaming or recording; open the recording and the bookmarks are offered as markers |
 | Output | Fast (lossless copy), Smart (re-encode only the first second), Precise (full re-encode), **vertical 9:16 Shorts** (crop or **blur background**), video only (no sound), audio only (m4a/mp3), merge segments, **join videos** (several files or their enabled segments; lossless when formats match), filename patterns, GPU encoding (NVENC/QSV/AMF) |
 | Output effects | **Loudness normalization** (-14 LUFS), **burned-in caption**, **burned-in subtitles** (srt/ass/vtt), **watermark** PNG, **intro/outro** videos |
-| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; **Record from site** (sign in once in the built-in browser, the stream is detected when it plays, one-click live recording — e.g. rplay); **record several streams at once** (recordings & downloads list); **realtime clips** (one hotkey saves the last 30 s while recording); **browser extension link** (one click sends the stream playing in Chrome/Edge/Whale to ClipSlicer, logged in as you are); direct m3u8 download; start screen with recent work and a sample video |
+| Import | **Open from URL** with built-in yt-dlp: YouTube, Chzzk, Twitch and more; download only a time range of long VODs; Vimeo addresses switch automatically to the player address that opens without a login; **record several streams at once** (recordings & downloads list: paste an address right in the window, and minimize or close the editor window while it downloads); **realtime clips** (one hotkey saves the last 30 s while recording); **browser extension link** (one click sends the stream playing in Chrome/Edge/Whale to ClipSlicer, logged in as you are; HLS and FLV live streams); direct m3u8 download; start screen with recent work and a sample video |
 | Publish | **YouTube upload** of the cut files to your connected channel as private videos (title, description, tags, thumbnail, playlist, resumable, pre-upload limit checks), **upload presets**, **scheduled publish**, **upload history**, **Discord webhook** posting, copy chapter list, save current frame as PNG |
 | Ops | Update notifications with self-replacement (**lite updates**), tray notifications, first-run guide, error log and dialogs, compatibility mode for GPU-less machines, portable settings (`settings.ini`) |
 
@@ -177,6 +177,9 @@ app/discord.py       Discord webhook posting
 app/startpanel.py    start screen            app/firstrun.py  first-run guide and sample video   app/notify.py  tray notifications
 app/youtube.py       YouTube OAuth + upload   app/youtube_ui.py  upload dialogs and presets   app/upload_history.py  upload history
 app/updater.py       update check and self-replacement (lite / full)
+app/downloads.py     recordings & downloads list   app/live_record.py  live recording (HLS, FLV)   app/bridge.py  browser extension receiver
+app/join.py          join videos
+browser_extension/   the 'ClipSlicer 연결' browser extension
 app/hls_section.py   HLS range download       app/ytdlp_patches.py  yt-dlp fixes
 tests/               unit and integration tests (run in CI)
 docs/index.html      user manual (Korean)
